@@ -29,7 +29,7 @@ func main() {
 	// Wrap it in a JSON payload
 	payload := []byte(fmt.Sprintf(`{"content": %q}`, string(mdData)))
 
-	req, err := http.NewRequest("POST", "http://localhost:8080/v1/posts", bytes.NewBuffer(payload))
+	req, err := http.NewRequest("POST", "https://bridgeapi.egeuysal.com/v1/posts", bytes.NewBuffer(payload))
 	if err != nil {
 		fmt.Println("Error creating request:", err)
 		os.Exit(1)
@@ -70,5 +70,5 @@ func main() {
 		os.Exit(1)
 	}
 
-	fmt.Printf("Your note is published at http://localhost:3000/%s\n", result.Data.ID)
+	fmt.Printf("Your note is published at https://bridge.egeuysal.com/%s\n", result.Data.ID)
 }
