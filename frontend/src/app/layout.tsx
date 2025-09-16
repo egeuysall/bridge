@@ -27,7 +27,7 @@ export const name = 'Bridge: Share your Markdown files quickly and easily.';
  * The main image URL for the site or application.
  * @type {string}
  */
-export const image = '';
+export const image = 'desktop.png';
 
 /**
  * A brief description of the site or application.
@@ -63,43 +63,43 @@ const keywords: string[] = ['markdown', 'share', 'link', 'bridge', 'egeuysal'];
  * A description of the main image for accessibility and SEO.
  * @type {string}
  */
-const imageDescription = '';
+const imageDescription = 'Bridge Logo';
 
 /**
  * The Twitter handle of the author (e.g., '@username').
  * @type {string}
  */
-const authorTwitter = '';
+const authorTwitter = 'egecreates';
 
 /**
  * The LinkedIn profile URL of the author.
  * @type {string}
  */
-const authorLinkedin = '';
+const authorLinkedin = 'egeuysall';
 
 /**
  * The path or URL to the ICO favicon.
  * @type {string}
  */
-const icoIcon = '';
+const icoIcon = 'icon.ico';
 
 /**
  * The path or URL to the PNG favicon.
  * @type {string}
  */
-const pngIcon = '';
+const pngIcon = 'icon.png';
 
 /**
  * The path or URL to the Apple touch icon.
  * @type {string}
  */
-const appleTouchIcon = '';
+const appleTouchIcon = 'apple-touch-icon.png';
 
 /**
  * The path or URL to the web app manifest file.
  * @type {string}
  */
-const manifestFile = '';
+const manifestFile = 'manifest.json';
 
 export async function generateMetadata(): Promise<Metadata> {
   // Fetch data needed for metadata
