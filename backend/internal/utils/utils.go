@@ -2,7 +2,7 @@ package utils
 
 import (
 	"encoding/json"
-	generated "github.com/egeuysall/bridge/internal/supabase/generated"
+	generated "github.com/egeuysall/bridge/backend/internal/supabase/generated"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"log"

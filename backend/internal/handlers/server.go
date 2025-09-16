@@ -1,7 +1,7 @@
 package handlers
 
 import (
-	"github.com/egeuysall/bridge/internal/utils"
+	"github.com/egeuysall/bridge/backend/internal/utils"
 	"net/http"
 )
 

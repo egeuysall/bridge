@@ -2,8 +2,8 @@ package handlers
 
 import (
 	"encoding/json"
-	"github.com/egeuysall/bridge/internal/models"
-	"github.com/egeuysall/bridge/internal/utils"
+	"github.com/egeuysall/bridge/backend/internal/models"
+	"github.com/egeuysall/bridge/backend/internal/utils"
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"

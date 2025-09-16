@@ -3,8 +3,8 @@ package api
 import (
 	"time"
 
-	"github.com/egeuysall/bridge/internal/handlers"
-	appmid "github.com/egeuysall/bridge/internal/middleware"
+	"github.com/egeuysall/bridge/backend/internal/handlers"
+	appmid "github.com/egeuysall/bridge/backend/internal/middleware"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/httprate"

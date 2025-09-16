@@ -1,4 +1,4 @@
-module github.com/egeuysall/bridge
+module github.com/egeuysall/bridge/backend
 
 go 1.25.1
 

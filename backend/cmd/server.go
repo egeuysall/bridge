@@ -2,14 +2,14 @@ package main
 
 import (
 	"fmt"
-	"github.com/egeuysall/bridge/internal/utils"
+	"github.com/egeuysall/bridge/backend/internal/utils"
 	"log"
 	"net/http"
 	"os"
 
-	"github.com/egeuysall/bridge/internal/api"
-	supabase "github.com/egeuysall/bridge/internal/supabase"
-	generated "github.com/egeuysall/bridge/internal/supabase/generated"
+	"github.com/egeuysall/bridge/backend/internal/api"
+	supabase "github.com/egeuysall/bridge/backend/internal/supabase"
+	generated "github.com/egeuysall/bridge/backend/internal/supabase/generated"
 	"github.com/joho/godotenv"
 )
 
