@@ -22,7 +22,7 @@ const DynamicGroups = ({ params }: { params: Promise<{ id: string }> }) => {
       try {
         console.log('[DynamicGroups] Fetching:', `${apiUrl}/${encodeURIComponent(id)}`);
 
-        const res = await fetch(`${apiUrl}/${encodeURIComponent(id)}`, {
+        const res = await fetch(`${apiUrl}/v1/posts/${encodeURIComponent(id)}`, {
           cache: 'no-store',
         });
 
