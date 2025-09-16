@@ -16,9 +16,14 @@ go install github.com/egeuysall/bridge/backend/cmd/bridge@latest
 ```
 
 ## Usage
-1. Add your Markdown file.
-2. Generate a shareable link.
-3. Share anywhere.
+
+To share a Markdown file, simply run:
+
+```bash
+bridge -p filename.md
+```
+
+This will automatically push your file to the internet and return a link that you can open or share.
 
 ## License
 This project is licensed under the GNU General Public License v3.0 (GPL-3.0). See the [LICENSE](LICENSE) file for details.
