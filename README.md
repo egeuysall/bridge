@@ -8,6 +8,13 @@ Convert any `.md` file into a clean, shareable link with zero hassle.
 - Instant web previews
 - Simple, fast workflow
 
+## Installation
+Install Bridge using Go:
+
+```bash
+go install github.com/egeuysall/bridge/backend/cmd/bridge@latest
+```
+
 ## Usage
 1. Add your Markdown file.
 2. Generate a shareable link.
