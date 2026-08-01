@@ -48,16 +48,25 @@ export function GET(request: Request) {
     });
   }
 
-  return Response.json(
+  return new Response(
+    JSON.stringify(
+      {
+        name: 'bri',
+        transport: 'MCP Streamable HTTP (stateless JSON responses)',
+        endpoint: '/mcp',
+        methods: ['POST'],
+        authentication: 'Authorization: Bearer <Bri API key>',
+        tools: TOOL_NAMES,
+      },
+      null,
+      2
+    ),
     {
-      name: 'bri',
-      transport: 'MCP Streamable HTTP (stateless JSON responses)',
-      endpoint: '/mcp',
-      methods: ['POST'],
-      authentication: 'Authorization: Bearer <Bri API key>',
-      tools: TOOL_NAMES,
-    },
-    { headers: { 'Cache-Control': 'no-store' } }
+      headers: {
+        'Cache-Control': 'no-store',
+        'Content-Type': 'application/json; charset=utf-8',
+      },
+    }
   );
 }
 
