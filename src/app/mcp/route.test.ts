@@ -24,7 +24,12 @@ describe('/mcp', () => {
   test('exposes discovery and the six tools over Streamable HTTP', async () => {
     const discovery = await GET(new Request('http://localhost:3000/mcp'));
     expect(discovery.status).toBe(200);
-    expect((await discovery.json()).tools).toHaveLength(6);
+    const discoveryText = await discovery.text();
+    expect(discoveryText).toContain(
+      '"authentication": "Authorization: Bearer <Bri API key>"'
+    );
+    expect(discoveryText).not.toContain('\\u003C');
+    expect(JSON.parse(discoveryText).tools).toHaveLength(6);
 
     const response = await POST(
       mcpRequest({
