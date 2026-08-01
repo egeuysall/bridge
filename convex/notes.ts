@@ -6,20 +6,22 @@ import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { selectPublicProfile } from "./userProfilesModel";
 
 const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
+const MAX_NOTE_VERSIONS = 100;
 
 type Permission = "read" | "write" | "read_write";
 type NeededPermission = "read" | "write";
+type VersionActor = "owner" | "api_key" | "admin" | "restore";
 type ConvexCtx = QueryCtx | MutationCtx;
 
 function sanitizeUsername(value: string): string {
-  return value.trim().toLowerCase().replace(/[^a-z0-9_-]/g, "");
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]/g, "");
 }
 
 function sanitizeTitle(value: string): string {
-  return value
-    .trim()
-    .replace(/\s+/g, " ")
-    .slice(0, 120);
+  return value.trim().replace(/\s+/g, " ").slice(0, 120);
 }
 
 function readIdentityString(value: unknown): string | null {
@@ -39,6 +41,8 @@ function resolveUsernameFromIdentity(identity: Record<string, unknown>): string 
     readIdentityString(identity.username) ??
     readIdentityString(identity.preferred_username) ??
     readIdentityString(identity.nickname) ??
+    readIdentityString(identity.handle) ??
+    readIdentityString(identity.user_handle) ??
     usernameFromEmail(readIdentityString(identity.email));
   if (!raw) return null;
   const cleaned = sanitizeUsername(raw);
@@ -225,11 +229,25 @@ function mapNote(note: Doc<"notes">) {
   };
 }
 
-function validateNoteInput(input: {
-  username: string;
-  title: string;
-  content: string;
-}) {
+function mapNoteVersionMetadata(version: Doc<"noteVersions">) {
+  return {
+    id: version._id,
+    noteId: version.noteId,
+    version: version.version,
+    title: version.title,
+    slug: version.slug,
+    visibility: version.visibility,
+    expiresAt: version.expiresAt,
+    createdAt: version.createdAt,
+    actor: version.actor,
+  };
+}
+
+function mapNoteVersion(version: Doc<"noteVersions">) {
+  return { ...mapNoteVersionMetadata(version), content: version.content };
+}
+
+function validateNoteInput(input: { username: string; title: string; content: string }) {
   const username = sanitizeUsername(input.username);
   const title = sanitizeTitle(input.title);
   const content = input.content.trim();
@@ -253,6 +271,86 @@ async function markDeleted(ctx: MutationCtx, note: Doc<"notes">, now: number) {
     noteId: note._id,
     expectedPurgeAt: purgeAt,
   });
+}
+
+async function insertNoteSnapshot(
+  ctx: MutationCtx,
+  note: Doc<"notes">,
+  actor: VersionActor,
+  now: number
+) {
+  const latest = await ctx.db
+    .query("noteVersions")
+    .withIndex("by_noteId_and_version", (q) => q.eq("noteId", note._id))
+    .order("desc")
+    .take(1);
+  const version = (latest[0]?.version ?? 0) + 1;
+
+  await ctx.db.insert("noteVersions", {
+    noteId: note._id,
+    ownerTokenIdentifier: note.ownerTokenIdentifier,
+    version,
+    title: note.title,
+    slug: note.slug,
+    content: note.content,
+    visibility: note.visibility,
+    expiresAt: note.expiresAt,
+    createdAt: now,
+    actor,
+  });
+
+  const versions = await ctx.db
+    .query("noteVersions")
+    .withIndex("by_noteId_and_version", (q) => q.eq("noteId", note._id))
+    .order("desc")
+    .take(MAX_NOTE_VERSIONS + 1);
+  const oldest = versions[MAX_NOTE_VERSIONS];
+  if (oldest) await ctx.db.delete(oldest._id);
+}
+
+async function deleteNoteVersionBatch(ctx: MutationCtx, noteId: Id<"notes">) {
+  const versions = await ctx.db
+    .query("noteVersions")
+    .withIndex("by_noteId_and_version", (q) => q.eq("noteId", noteId))
+    .take(MAX_NOTE_VERSIONS);
+
+  for (const version of versions) {
+    await ctx.db.delete(version._id);
+  }
+
+  return versions.length;
+}
+
+async function requireActiveNoteForVersionRead(ctx: ConvexCtx, noteId: Id<"notes">) {
+  const note = await ctx.db.get(noteId);
+  if (!note || note.state !== "active" || isPastExpiration(note, Date.now())) return null;
+  return note;
+}
+
+function readServerEnv(name: string): string {
+  return (
+    (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env?.[
+      name
+    ]?.trim() || ""
+  );
+}
+
+function assertAdminAccess(identity: Record<string, unknown>, adminSecret: string) {
+  const configuredSecret = readServerEnv("BRIDGE_ADMIN_SECRET");
+  if (!configuredSecret || adminSecret !== configuredSecret) {
+    throw new Error("Forbidden");
+  }
+
+  const admins = new Set(
+    readServerEnv("BRIDGE_ADMIN_USERS")
+      .split(",")
+      .map((value) => value.trim().toLowerCase())
+      .filter(Boolean)
+  );
+  const email = cleanEmail(readIdentityString(identity.email));
+  if (admins.size === 0 || !admins.has(email ?? "")) {
+    throw new Error("Forbidden");
+  }
 }
 
 function isPastExpiration(note: Pick<Doc<"notes">, "expiresAt">, now: number): boolean {
@@ -394,7 +492,8 @@ export const listPublicByUsername = query({
 
     return rows
       .filter(
-        (row) => row.state === "active" && row.visibility === "public" && !isPastExpiration(row, now)
+        (row) =>
+          row.state === "active" && row.visibility === "public" && !isPastExpiration(row, now)
       )
       .slice(0, 100)
       .map(mapNote);
@@ -440,6 +539,31 @@ export const getMineById = query({
     if (!note) return null;
     if (note.ownerTokenIdentifier !== identity.tokenIdentifier) return null;
     if (note.state === "active" && isPastExpiration(note, Date.now())) return null;
+
+    return mapNote(note);
+  },
+});
+
+export const getAdminByUsernameAndSlug = query({
+  args: {
+    adminSecret: v.string(),
+    username: v.string(),
+    slug: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Not authenticated");
+    assertAdminAccess(identity as Record<string, unknown>, args.adminSecret);
+
+    const username = sanitizeUsername(args.username);
+    const slug = slugify(args.slug);
+    if (!username || !slug) return null;
+
+    const note = await ctx.db
+      .query("notes")
+      .withIndex("by_username_and_slug", (q) => q.eq("username", username).eq("slug", slug))
+      .unique();
+    if (!note || note.state !== "active" || isPastExpiration(note, Date.now())) return null;
 
     return mapNote(note);
   },
@@ -574,7 +698,8 @@ export const inviteUser = mutation({
     if (note.ownerTokenIdentifier !== identity.tokenIdentifier) throw new Error("Forbidden");
     if (note.state !== "active") throw new Error("Cannot invite to deleted note");
     const now = Date.now();
-    if (await markDeletedIfExpired(ctx, note, now)) throw new Error("Cannot invite to deleted note");
+    if (await markDeletedIfExpired(ctx, note, now))
+      throw new Error("Cannot invite to deleted note");
 
     const inviteeUsername = sanitizeUsername(args.inviteeUsername);
     if (!inviteeUsername) throw new Error("Invitee username is required");
@@ -628,7 +753,8 @@ export const inviteUserWithApiKey = mutation({
     if (note.ownerTokenIdentifier !== keyRecord.ownerTokenIdentifier) throw new Error("Forbidden");
     if (note.state !== "active") throw new Error("Cannot invite to deleted note");
     const now = Date.now();
-    if (await markDeletedIfExpired(ctx, note, now)) throw new Error("Cannot invite to deleted note");
+    if (await markDeletedIfExpired(ctx, note, now))
+      throw new Error("Cannot invite to deleted note");
 
     const inviteeUsername = sanitizeUsername(args.inviteeUsername);
     if (!inviteeUsername) throw new Error("Invitee username is required");
@@ -744,7 +870,8 @@ export const update = mutation({
     if (!note) throw new Error("Note not found");
     if (note.ownerTokenIdentifier !== identity.tokenIdentifier) throw new Error("Forbidden");
     if (note.state !== "active") throw new Error("Cannot edit deleted note");
-    if (await markDeletedIfExpired(ctx, note, Date.now())) throw new Error("Cannot edit deleted note");
+    if (await markDeletedIfExpired(ctx, note, Date.now()))
+      throw new Error("Cannot edit deleted note");
 
     const title = sanitizeTitle(args.title);
     const content = args.content.trim();
@@ -760,6 +887,7 @@ export const update = mutation({
         ? now + Math.floor(expiresInDays * 24 * 60 * 60 * 1000)
         : null;
 
+    await insertNoteSnapshot(ctx, note, "owner", now);
     await ctx.db.patch(note._id, {
       title,
       slug: uniqueSlug,
@@ -800,7 +928,8 @@ export const updateWithApiKey = mutation({
     if (!note) throw new Error("Note not found");
     if (note.ownerTokenIdentifier !== keyRecord.ownerTokenIdentifier) throw new Error("Forbidden");
     if (note.state !== "active") throw new Error("Cannot edit deleted note");
-    if (await markDeletedIfExpired(ctx, note, Date.now())) throw new Error("Cannot edit deleted note");
+    if (await markDeletedIfExpired(ctx, note, Date.now()))
+      throw new Error("Cannot edit deleted note");
 
     const title = sanitizeTitle(args.title);
     const content = args.content.trim();
@@ -808,7 +937,12 @@ export const updateWithApiKey = mutation({
     if (!content) throw new Error("Content cannot be empty");
 
     const baseSlug = slugify(title);
-    const uniqueSlug = await resolveUniqueSlug(ctx, keyRecord.ownerTokenIdentifier, baseSlug, note._id);
+    const uniqueSlug = await resolveUniqueSlug(
+      ctx,
+      keyRecord.ownerTokenIdentifier,
+      baseSlug,
+      note._id
+    );
     const now = Date.now();
     const expiresInDays = args.expiresInDays ?? null;
     const expiresAt =
@@ -816,6 +950,7 @@ export const updateWithApiKey = mutation({
         ? now + Math.floor(expiresInDays * 24 * 60 * 60 * 1000)
         : null;
 
+    await insertNoteSnapshot(ctx, note, "api_key", now);
     await ctx.db.patch(note._id, {
       title,
       slug: uniqueSlug,
@@ -922,6 +1057,10 @@ export const permanentlyDelete = mutation({
     if (note.ownerTokenIdentifier !== identity.tokenIdentifier) throw new Error("Forbidden");
 
     await ctx.db.delete(note._id);
+    const deletedCount = await deleteNoteVersionBatch(ctx, note._id);
+    if (deletedCount === 100) {
+      await ctx.scheduler.runAfter(0, internal.notes.purgeNoteVersions, { noteId: note._id });
+    }
     return { deleted: true };
   },
 });
@@ -940,6 +1079,10 @@ export const permanentlyDeleteWithApiKey = mutation({
     if (note.ownerTokenIdentifier !== keyRecord.ownerTokenIdentifier) throw new Error("Forbidden");
 
     await ctx.db.delete(note._id);
+    const deletedCount = await deleteNoteVersionBatch(ctx, note._id);
+    if (deletedCount === 100) {
+      await ctx.scheduler.runAfter(0, internal.notes.purgeNoteVersions, { noteId: note._id });
+    }
     await ctx.db.patch(keyRecord._id, { lastUsedAt: Date.now() });
     return { deleted: true };
   },
@@ -958,17 +1101,12 @@ export const adminUpdate = mutation({
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) throw new Error("Not authenticated");
 
-    const configuredSecret =
-      (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env?.[
-        "BRIDGE_ADMIN_SECRET"
-      ]?.trim() || "";
-    if (!configuredSecret || args.adminSecret !== configuredSecret) {
-      throw new Error("Forbidden");
-    }
+    assertAdminAccess(identity as Record<string, unknown>, args.adminSecret);
 
     const note = await ctx.db.get(args.noteId);
     if (!note) throw new Error("Note not found");
-    if (await markDeletedIfExpired(ctx, note, Date.now())) throw new Error("Cannot edit deleted note");
+    if (await markDeletedIfExpired(ctx, note, Date.now()))
+      throw new Error("Cannot edit deleted note");
 
     const title = sanitizeTitle(args.title);
     const content = args.content.trim();
@@ -984,6 +1122,7 @@ export const adminUpdate = mutation({
         ? now + Math.floor(expiresInDays * 24 * 60 * 60 * 1000)
         : null;
 
+    await insertNoteSnapshot(ctx, note, "admin", now);
     await ctx.db.patch(note._id, {
       title,
       slug: uniqueSlug,
@@ -993,7 +1132,276 @@ export const adminUpdate = mutation({
       updatedAt: now,
     });
 
+    if (expiresAt !== null) {
+      await ctx.scheduler.runAt(expiresAt, internal.notes.expireNote, {
+        noteId: note._id,
+        expectedExpiresAt: expiresAt,
+      });
+    }
+
     return { id: note._id, slug: uniqueSlug, title };
+  },
+});
+
+export const listVersionsMine = query({
+  args: { noteId: v.id("notes"), limit: v.number() },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Not authenticated");
+    const note = await requireActiveNoteForVersionRead(ctx, args.noteId);
+    if (!note) throw new Error("Note not found");
+    if (note.ownerTokenIdentifier !== identity.tokenIdentifier) throw new Error("Forbidden");
+
+    const limit = Math.max(1, Math.min(100, Math.floor(args.limit)));
+    const versions = await ctx.db
+      .query("noteVersions")
+      .withIndex("by_noteId_and_version", (q) => q.eq("noteId", note._id))
+      .order("desc")
+      .take(limit);
+    return versions.map(mapNoteVersionMetadata);
+  },
+});
+
+export const listVersionsByApiKey = query({
+  args: { apiKey: v.string(), noteId: v.id("notes"), limit: v.number() },
+  handler: async (ctx, args) => {
+    const keyRecord = await resolveApiKey(ctx, args.apiKey);
+    if (!keyRecord) throw new Error("Invalid API key");
+    if (!hasPermission(keyRecord.permissions, "read")) {
+      throw new Error("API key lacks read permission");
+    }
+
+    const note = await requireActiveNoteForVersionRead(ctx, args.noteId);
+    if (!note) throw new Error("Note not found");
+    if (note.ownerTokenIdentifier !== keyRecord.ownerTokenIdentifier) throw new Error("Forbidden");
+
+    const limit = Math.max(1, Math.min(100, Math.floor(args.limit)));
+    const versions = await ctx.db
+      .query("noteVersions")
+      .withIndex("by_noteId_and_version", (q) => q.eq("noteId", note._id))
+      .order("desc")
+      .take(limit);
+    return versions.map(mapNoteVersionMetadata);
+  },
+});
+
+export const getVersionMine = query({
+  args: { noteId: v.id("notes"), versionId: v.id("noteVersions") },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Not authenticated");
+    const note = await requireActiveNoteForVersionRead(ctx, args.noteId);
+    if (!note) throw new Error("Note not found");
+    if (note.ownerTokenIdentifier !== identity.tokenIdentifier) throw new Error("Forbidden");
+
+    const version = await ctx.db.get(args.versionId);
+    if (!version || version.noteId !== note._id) return null;
+    return mapNoteVersion(version);
+  },
+});
+
+export const getVersionByApiKey = query({
+  args: { apiKey: v.string(), noteId: v.id("notes"), versionId: v.id("noteVersions") },
+  handler: async (ctx, args) => {
+    const keyRecord = await resolveApiKey(ctx, args.apiKey);
+    if (!keyRecord) throw new Error("Invalid API key");
+    if (!hasPermission(keyRecord.permissions, "read")) {
+      throw new Error("API key lacks read permission");
+    }
+
+    const note = await requireActiveNoteForVersionRead(ctx, args.noteId);
+    if (!note) throw new Error("Note not found");
+    if (note.ownerTokenIdentifier !== keyRecord.ownerTokenIdentifier) throw new Error("Forbidden");
+
+    const version = await ctx.db.get(args.versionId);
+    if (!version || version.noteId !== note._id) return null;
+    return mapNoteVersion(version);
+  },
+});
+
+export const listVersionsAdmin = query({
+  args: { adminSecret: v.string(), noteId: v.id("notes"), limit: v.number() },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Not authenticated");
+    assertAdminAccess(identity as Record<string, unknown>, args.adminSecret);
+
+    const note = await requireActiveNoteForVersionRead(ctx, args.noteId);
+    if (!note) throw new Error("Note not found");
+
+    const limit = Math.max(1, Math.min(100, Math.floor(args.limit)));
+    const versions = await ctx.db
+      .query("noteVersions")
+      .withIndex("by_noteId_and_version", (q) => q.eq("noteId", note._id))
+      .order("desc")
+      .take(limit);
+    return versions.map(mapNoteVersionMetadata);
+  },
+});
+
+export const getVersionAdmin = query({
+  args: { adminSecret: v.string(), noteId: v.id("notes"), versionId: v.id("noteVersions") },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Not authenticated");
+    assertAdminAccess(identity as Record<string, unknown>, args.adminSecret);
+
+    const note = await requireActiveNoteForVersionRead(ctx, args.noteId);
+    if (!note) throw new Error("Note not found");
+
+    const version = await ctx.db.get(args.versionId);
+    if (!version || version.noteId !== note._id) return null;
+    return mapNoteVersion(version);
+  },
+});
+
+export const restoreVersion = mutation({
+  args: { noteId: v.id("notes"), versionId: v.id("noteVersions") },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Not authenticated");
+    const note = await ctx.db.get(args.noteId);
+    if (!note) throw new Error("Note not found");
+    if (note.ownerTokenIdentifier !== identity.tokenIdentifier) throw new Error("Forbidden");
+    if (note.state !== "active") throw new Error("Cannot edit deleted note");
+    if (await markDeletedIfExpired(ctx, note, Date.now()))
+      throw new Error("Cannot edit deleted note");
+
+    const version = await ctx.db.get(args.versionId);
+    if (!version || version.noteId !== note._id) throw new Error("Version not found");
+
+    const now = Date.now();
+    const uniqueSlug = await resolveUniqueSlug(
+      ctx,
+      identity.tokenIdentifier,
+      version.slug,
+      note._id
+    );
+    const restoredExpiresAt = version.expiresAt;
+    await insertNoteSnapshot(ctx, note, "restore", now);
+    await ctx.db.patch(note._id, {
+      title: version.title,
+      slug: uniqueSlug,
+      content: version.content,
+      visibility: version.visibility,
+      expiresAt: restoredExpiresAt,
+      updatedAt: now,
+    });
+
+    if (restoredExpiresAt !== null) {
+      await ctx.scheduler.runAfter(
+        Math.max(0, restoredExpiresAt - now),
+        internal.notes.expireNote,
+        {
+          noteId: note._id,
+          expectedExpiresAt: restoredExpiresAt,
+        }
+      );
+    }
+
+    return { restored: true, id: note._id, slug: uniqueSlug, title: version.title };
+  },
+});
+
+export const restoreVersionByApiKey = mutation({
+  args: { apiKey: v.string(), noteId: v.id("notes"), versionId: v.id("noteVersions") },
+  handler: async (ctx, args) => {
+    const keyRecord = await resolveApiKey(ctx, args.apiKey);
+    if (!keyRecord) throw new Error("Invalid API key");
+    if (!hasPermission(keyRecord.permissions, "write")) {
+      throw new Error("API key lacks write permission");
+    }
+
+    const note = await ctx.db.get(args.noteId);
+    if (!note) throw new Error("Note not found");
+    if (note.ownerTokenIdentifier !== keyRecord.ownerTokenIdentifier) throw new Error("Forbidden");
+    if (note.state !== "active") throw new Error("Cannot edit deleted note");
+    if (await markDeletedIfExpired(ctx, note, Date.now()))
+      throw new Error("Cannot edit deleted note");
+
+    const version = await ctx.db.get(args.versionId);
+    if (!version || version.noteId !== note._id) throw new Error("Version not found");
+
+    const now = Date.now();
+    const uniqueSlug = await resolveUniqueSlug(
+      ctx,
+      keyRecord.ownerTokenIdentifier,
+      version.slug,
+      note._id
+    );
+    const restoredExpiresAt = version.expiresAt;
+    await insertNoteSnapshot(ctx, note, "restore", now);
+    await ctx.db.patch(note._id, {
+      title: version.title,
+      slug: uniqueSlug,
+      content: version.content,
+      visibility: version.visibility,
+      expiresAt: restoredExpiresAt,
+      updatedAt: now,
+    });
+    await ctx.db.patch(keyRecord._id, { lastUsedAt: now });
+
+    if (restoredExpiresAt !== null) {
+      await ctx.scheduler.runAfter(
+        Math.max(0, restoredExpiresAt - now),
+        internal.notes.expireNote,
+        {
+          noteId: note._id,
+          expectedExpiresAt: restoredExpiresAt,
+        }
+      );
+    }
+
+    return { restored: true, id: note._id, slug: uniqueSlug, title: version.title };
+  },
+});
+
+export const adminRestoreVersion = mutation({
+  args: { adminSecret: v.string(), noteId: v.id("notes"), versionId: v.id("noteVersions") },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Not authenticated");
+    assertAdminAccess(identity as Record<string, unknown>, args.adminSecret);
+
+    const note = await ctx.db.get(args.noteId);
+    if (!note) throw new Error("Note not found");
+    if (note.state !== "active") throw new Error("Cannot edit deleted note");
+    if (await markDeletedIfExpired(ctx, note, Date.now()))
+      throw new Error("Cannot edit deleted note");
+
+    const version = await ctx.db.get(args.versionId);
+    if (!version || version.noteId !== note._id) throw new Error("Version not found");
+
+    const now = Date.now();
+    const uniqueSlug = await resolveUniqueSlug(
+      ctx,
+      note.ownerTokenIdentifier,
+      version.slug,
+      note._id
+    );
+    const restoredExpiresAt = version.expiresAt;
+    await insertNoteSnapshot(ctx, note, "restore", now);
+    await ctx.db.patch(note._id, {
+      title: version.title,
+      slug: uniqueSlug,
+      content: version.content,
+      visibility: version.visibility,
+      expiresAt: restoredExpiresAt,
+      updatedAt: now,
+    });
+
+    if (restoredExpiresAt !== null) {
+      await ctx.scheduler.runAfter(
+        Math.max(0, restoredExpiresAt - now),
+        internal.notes.expireNote,
+        {
+          noteId: note._id,
+          expectedExpiresAt: restoredExpiresAt,
+        }
+      );
+    }
+
+    return { restored: true, id: note._id, slug: uniqueSlug, title: version.title };
   },
 });
 
@@ -1023,7 +1431,8 @@ export const trackPageView = mutation({
     const metric = await ctx.db
       .query("pageMetrics")
       .withIndex("by_ownerTokenIdentifier_and_slug_and_dayKey", (q) =>
-        q.eq("ownerTokenIdentifier", note.ownerTokenIdentifier)
+        q
+          .eq("ownerTokenIdentifier", note.ownerTokenIdentifier)
           .eq("slug", note.slug)
           .eq("dayKey", dayKey)
       )
@@ -1068,7 +1477,8 @@ export const analyticsMine = query({
     const rows = await ctx.db
       .query("pageMetrics")
       .withIndex("by_ownerTokenIdentifier_and_dayKey", (q) =>
-        q.eq("ownerTokenIdentifier", identity.tokenIdentifier)
+        q
+          .eq("ownerTokenIdentifier", identity.tokenIdentifier)
           .gte("dayKey", sinceKey)
           .lte("dayKey", untilKey)
       )
@@ -1229,5 +1639,19 @@ export const purgeDeletedNote = internalMutation({
     if (Date.now() < args.expectedPurgeAt) return;
 
     await ctx.db.delete(note._id);
+    const deletedCount = await deleteNoteVersionBatch(ctx, note._id);
+    if (deletedCount === 100) {
+      await ctx.scheduler.runAfter(0, internal.notes.purgeNoteVersions, { noteId: note._id });
+    }
+  },
+});
+
+export const purgeNoteVersions = internalMutation({
+  args: { noteId: v.id("notes") },
+  handler: async (ctx, args) => {
+    const deletedCount = await deleteNoteVersionBatch(ctx, args.noteId);
+    if (deletedCount === 100) {
+      await ctx.scheduler.runAfter(0, internal.notes.purgeNoteVersions, { noteId: args.noteId });
+    }
   },
 });

@@ -1,5 +1,3 @@
-import { resolveUserHandleFromUser } from '@/lib/user-handle';
-
 type UserLike = {
   primaryEmailAddress?: { emailAddress?: string | null } | null;
 } | null;
@@ -20,8 +18,7 @@ export function isAdminUser(user: UserLike): boolean {
   const admins = parseList(process.env.BRIDGE_ADMIN_USERS);
   if (admins.size === 0) return false;
 
-  const handle = resolveUserHandleFromUser(user);
   const email = user.primaryEmailAddress?.emailAddress?.trim().toLowerCase() || '';
 
-  return (handle ? admins.has(handle) : false) || (email ? admins.has(email) : false);
+  return email ? admins.has(email) : false;
 }

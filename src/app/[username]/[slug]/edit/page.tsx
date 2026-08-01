@@ -1,7 +1,8 @@
 import { auth, currentUser } from '@clerk/nextjs/server';
 import { notFound, redirect } from 'next/navigation';
 import { NoteSlugEditor } from '@/components/dashboard/note-slug-editor';
-import { getNoteByUsernameAndSlug } from '@/lib/notes';
+import { isAdminUser } from '@/lib/admin';
+import { getAdminNoteByUsernameAndSlug, getNoteByUsernameAndSlug } from '@/lib/notes';
 import { resolveUserHandleFromUser } from '@/lib/user-handle';
 import { isPublicResourcePath, isPublicUsernamePath } from '@/lib/user-handle';
 
@@ -18,17 +19,19 @@ export default async function EditNotePage({
 
   const user = await currentUser();
   const handle = resolveUserHandleFromUser(user);
-  if (handle !== username) notFound();
+  const isAdmin = isAdminUser(user);
+  if (handle !== username && !isAdmin) notFound();
 
   const token = (await getToken({ template: 'convex' })) ?? (await getToken()) ?? null;
-  const note = await getNoteByUsernameAndSlug({
-    username,
-    slug,
-    apiKey: token,
-    token,
-  });
+  if (!token) redirect('/sign-in');
 
-  if (!note || note.username !== handle) notFound();
+  const adminSecret = process.env.BRIDGE_ADMIN_SECRET?.trim() || '';
+  const note =
+    isAdmin && adminSecret
+      ? await getAdminNoteByUsernameAndSlug({ username, slug, token, adminSecret })
+      : await getNoteByUsernameAndSlug({ username, slug, token });
 
-  return <NoteSlugEditor note={note} />;
+  if (!note || (!isAdmin && note.username !== handle)) notFound();
+
+  return <NoteSlugEditor note={note} isAdmin={isAdmin} />;
 }

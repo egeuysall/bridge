@@ -3,18 +3,32 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
 import { checkForUpdates } from '../update';
-import versionManifest from '../version.json';
 import { renderCliHelp, renderPublishResult } from './ui';
+import {
+  DEFAULT_API_ENDPOINT,
+  DEFAULT_MAX_BYTES,
+  DEFAULT_RETRIES,
+  DEFAULT_SITE_URL,
+  DEFAULT_TIMEOUT_MS,
+  INSTALL_COMMAND,
+  RELEASE_REPO,
+  UPDATE_SOURCE_URL,
+  validateUrl,
+  VERSION,
+} from './runtime';
 
-export const VERSION = versionManifest.version;
-export const DEFAULT_SITE_URL = (process.env.BRI_SITE_URL ?? 'https://bri.fyi').replace(/\/+$/, '');
-export const DEFAULT_API_ENDPOINT = `${DEFAULT_SITE_URL}/api/notes`;
-export const RELEASE_REPO = 'egeuysall/bri';
-export const UPDATE_SOURCE_URL = `https://api.github.com/repos/${RELEASE_REPO}/releases/latest`;
-export const INSTALL_COMMAND = `curl -fsSL ${DEFAULT_SITE_URL}/install.sh | bash`;
-export const DEFAULT_TIMEOUT_MS = 10_000;
-export const DEFAULT_MAX_BYTES = 1_048_576;
-export const DEFAULT_RETRIES = 2;
+export {
+  DEFAULT_API_ENDPOINT,
+  DEFAULT_MAX_BYTES,
+  DEFAULT_RETRIES,
+  DEFAULT_SITE_URL,
+  DEFAULT_TIMEOUT_MS,
+  INSTALL_COMMAND,
+  RELEASE_REPO,
+  UPDATE_SOURCE_URL,
+  validateUrl,
+  VERSION,
+};
 
 export const ansi = {
   reset: '\x1b[0m',
@@ -91,6 +105,12 @@ export type NotesReadOptions = {
   color: boolean;
 };
 
+export type NotesVersionOptions = {
+  endpoint?: string;
+  json?: boolean;
+  color: boolean;
+};
+
 export type NotesAskOptions = {
   question?: string;
   stdin?: boolean;
@@ -113,6 +133,12 @@ export type NotesUpdateOptions = {
 
 export type NotesDeleteOptions = {
   permanent?: boolean;
+  endpoint?: string;
+  json?: boolean;
+  color: boolean;
+};
+
+export type NotesRestoreVersionOptions = {
   endpoint?: string;
   json?: boolean;
   color: boolean;
@@ -329,27 +355,12 @@ export function parseOptionalBoolean(raw: string | undefined): boolean | undefin
   return undefined;
 }
 
-export function isLocalHost(hostname: string): boolean {
-  return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1';
-}
-
-export function validateUrl(raw: string, label: string): URL {
-  let parsed: URL;
-
-  try {
-    parsed = new URL(raw);
-  } catch {
-    throw new Error(`${label} is not a valid URL`);
+export function validateResourceId(id: string, label: string): string {
+  const normalized = id.trim();
+  if (!/^[A-Za-z0-9_-]{1,128}$/.test(normalized)) {
+    throw new Error(`${label} must be 1-128 letters, numbers, underscores, or dashes`);
   }
-
-  const secure = parsed.protocol === 'https:';
-  const localHttp = parsed.protocol === 'http:' && isLocalHost(parsed.hostname);
-
-  if (!secure && !localHttp) {
-    throw new Error(`${label} must use https (http allowed only for localhost)`);
-  }
-
-  return parsed;
+  return normalized;
 }
 
 export function parseTitleFromMarkdown(content: string): string {

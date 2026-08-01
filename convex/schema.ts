@@ -38,6 +38,25 @@ export default defineSchema({
       "createdAt",
     ])
     .index("by_state_and_purgeAt", ["state", "purgeAt"]),
+  noteVersions: defineTable({
+    noteId: v.id("notes"),
+    ownerTokenIdentifier: v.string(),
+    version: v.number(),
+    title: v.string(),
+    slug: v.string(),
+    content: v.string(),
+    visibility: v.union(v.literal("public"), v.literal("private")),
+    expiresAt: v.union(v.number(), v.null()),
+    createdAt: v.number(),
+    actor: v.union(
+      v.literal("owner"),
+      v.literal("api_key"),
+      v.literal("admin"),
+      v.literal("restore")
+    ),
+  })
+    .index("by_noteId_and_version", ["noteId", "version"])
+    .index("by_noteId_and_createdAt", ["noteId", "createdAt"]),
   apiKeys: defineTable({
     ownerTokenIdentifier: v.string(),
     username: v.string(),

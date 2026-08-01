@@ -5,8 +5,10 @@ import { auth, currentUser } from '@clerk/nextjs/server';
 import { NoteAiOverlay } from '@/components/ai/note-ai-overlay';
 import { MarkdownContent } from '@/components/markdown';
 import { ExportPdfButton } from '@/components/notes/export-pdf-button';
+import { isAdminUser } from '@/lib/admin';
 import { geist } from '@/lib/fonts';
 import {
+  getAdminNoteByUsernameAndSlug,
   getNoteByUsernameAndSlug,
   getQuickLinkByUsernameAndKey,
   trackNotePageView,
@@ -63,14 +65,14 @@ export default async function NotePage({
   const { getToken } = await auth();
   const token = (await getToken({ template: 'convex' })) ?? (await getToken()) ?? null;
   const user = await currentUser();
-  const canEdit = resolveUserHandleFromUser(user) === username;
+  const isAdmin = isAdminUser(user);
+  const canEdit = resolveUserHandleFromUser(user) === username || isAdmin;
+  const adminSecret = process.env.BRIDGE_ADMIN_SECRET?.trim() || '';
 
-  const note = await getNoteByUsernameAndSlug({
-    username,
-    slug,
-    apiKey: token,
-    token,
-  });
+  const note =
+    isAdmin && token && adminSecret
+      ? await getAdminNoteByUsernameAndSlug({ username, slug, token, adminSecret })
+      : await getNoteByUsernameAndSlug({ username, slug, token });
 
   if (!note) {
     const quickLink = await getQuickLinkByUsernameAndKey({ username, key: slug });

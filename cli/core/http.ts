@@ -1,5 +1,5 @@
 import { safeJsonStringify } from '@vercel/flags';
-import { DEFAULT_TIMEOUT_MS, VERSION } from './shared';
+import { DEFAULT_TIMEOUT_MS, VERSION } from './runtime';
 
 async function wait(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));

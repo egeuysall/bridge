@@ -244,48 +244,82 @@ function CommandList({ rows, enableColor }: { rows: CommandRow[]; enableColor: b
 
 export function renderCliHelp(enableColor: boolean, version: string): void {
   const rows: CommandRow[] = [
-    { command: 'bri publish --path <file>', description: 'Publish markdown note', group: 'publish' },
+    {
+      command: 'bri publish --path <file>',
+      description: 'Publish markdown note',
+      group: 'publish',
+    },
     { command: 'bri publish --stdin', description: 'Publish piped markdown', group: 'publish' },
     { command: 'bri slug --path <file>', description: 'Preview generated slug', group: 'publish' },
     { command: 'bri notes list', description: 'List your notes', group: 'library' },
     { command: 'bri notes read <user> <slug>', description: 'Read note content', group: 'library' },
-    { command: 'bri notes ask <user> <slug> --question <q>', description: 'Ask AI about a note', group: 'library' },
+    { command: 'bri notes history <id>', description: 'List note versions', group: 'library' },
+    {
+      command: 'bri notes version <id> <version>',
+      description: 'Read a note version',
+      group: 'library',
+    },
+    {
+      command: 'bri notes restore-version <id> <version>',
+      description: 'Restore a note version',
+      group: 'library',
+    },
+    {
+      command: 'bri notes ask <user> <slug> --question <q>',
+      description: 'Ask AI about a note',
+      group: 'library',
+    },
     { command: 'bri links list', description: 'List quick links', group: 'library' },
     { command: 'bri links create --key <key>', description: 'Create quick link', group: 'library' },
     { command: 'bri notifications list', description: 'Show invites and alerts', group: 'account' },
     { command: 'bri login --api-key <key>', description: 'Save API key locally', group: 'account' },
     { command: 'bri config list', description: 'Show local defaults', group: 'account' },
     { command: 'bri doctor', description: 'Check runtime and endpoint', group: 'system' },
+    { command: 'bri mcp', description: 'Start stdio MCP server', group: 'system' },
     { command: 'bri self-update --check-only', description: 'Check CLI release', group: 'system' },
   ];
 
   print(
     <Box flexDirection="column">
-      <Box borderStyle="round" borderColor={color(enableColor, palette.accent)} paddingX={2} paddingY={1}>
+      <Box
+        borderStyle="round"
+        borderColor={color(enableColor, palette.accent)}
+        paddingX={2}
+        paddingY={1}
+      >
         <Box flexDirection="column" width={72}>
           <Box>
             <Logo enableColor={enableColor} />
             <Box marginLeft={3} flexDirection="column" width={43} flexShrink={0}>
               <Box>
                 <Badge enableColor={enableColor}>CLI</Badge>
-                <Text color={color(enableColor, palette.dim)}>  v{version}</Text>
+                <Text color={color(enableColor, palette.dim)}> v{version}</Text>
               </Box>
-              <Text color={color(enableColor, palette.accentSoft)}>Markdown publishing and links from terminal</Text>
+              <Text color={color(enableColor, palette.accentSoft)}>
+                Markdown publishing and links from terminal
+              </Text>
               <Text color={color(enableColor, palette.dim)}>Auth, dry runs, copy/open.</Text>
             </Box>
           </Box>
         </Box>
       </Box>
       <CommandList rows={rows} enableColor={enableColor} />
-      <Box marginTop={1} borderStyle="single" borderColor={color(enableColor, palette.line)} paddingX={1}>
+      <Box
+        marginTop={1}
+        borderStyle="single"
+        borderColor={color(enableColor, palette.line)}
+        paddingX={1}
+      >
         <Box flexDirection="column">
           <Box>
             <Text color={color(enableColor, palette.accent)}>try </Text>
-            <Text color={color(enableColor, palette.command)}>bri publish --path ./post.md --dry-run</Text>
+            <Text color={color(enableColor, palette.command)}>
+              bri publish --path ./post.md --dry-run
+            </Text>
           </Box>
-          <Text color={color(enableColor, palette.dim)}>help  bri publish --help</Text>
+          <Text color={color(enableColor, palette.dim)}>help bri publish --help</Text>
           <Text color={color(enableColor, palette.dim)}>
-            install  curl -fsSL {defaultSiteUrl}/install.sh | bash
+            install curl -fsSL {defaultSiteUrl}/install.sh | bash
           </Text>
         </Box>
       </Box>
@@ -300,7 +334,8 @@ export function renderPanel(input: {
   footer?: string;
   stderr?: boolean;
 }): void {
-  const alertRow = input.rows.length === 1 && input.rows[0]?.tone === 'warn' ? input.rows[0] : undefined;
+  const alertRow =
+    input.rows.length === 1 && input.rows[0]?.tone === 'warn' ? input.rows[0] : undefined;
   const element = (
     <Box flexDirection="column">
       {alertRow ? (
@@ -308,7 +343,11 @@ export function renderPanel(input: {
           {alertRow.value}
         </Alert>
       ) : (
-        <Box borderStyle="round" borderColor={color(input.enableColor, palette.accent)} paddingX={1}>
+        <Box
+          borderStyle="round"
+          borderColor={color(input.enableColor, palette.accent)}
+          paddingX={1}
+        >
           <Box>
             <Text color={color(input.enableColor, palette.accent)}>● </Text>
             <Text bold color={color(input.enableColor, palette.command)}>
@@ -325,7 +364,9 @@ export function renderPanel(input: {
                 {row.label === 'status' && input.enableColor ? (
                   <InkBadge color={toneBadgeColor(row.tone)}>{row.value}</InkBadge>
                 ) : (
-                  <Text color={color(input.enableColor, palette.dim)}>{stripPadding(row.label)}</Text>
+                  <Text color={color(input.enableColor, palette.dim)}>
+                    {stripPadding(row.label)}
+                  </Text>
                 )}
               </Box>
               <Text color={color(input.enableColor, palette.line)}>│ </Text>
@@ -339,7 +380,12 @@ export function renderPanel(input: {
         </Box>
       )}
       {input.footer ? (
-        <Box marginTop={1} borderStyle="single" borderColor={color(input.enableColor, palette.line)} paddingX={1}>
+        <Box
+          marginTop={1}
+          borderStyle="single"
+          borderColor={color(input.enableColor, palette.line)}
+          paddingX={1}
+        >
           <Text color={color(input.enableColor, palette.dim)}>{input.footer}</Text>
         </Box>
       ) : null}
@@ -437,7 +483,7 @@ export function renderTable<T>(input: {
         <Text bold color={color(input.enableColor, palette.command)}>
           {input.title}
         </Text>
-        <Text color={color(input.enableColor, palette.dim)}>  {input.rows.length} rows</Text>
+        <Text color={color(input.enableColor, palette.dim)}> {input.rows.length} rows</Text>
       </Box>
       <Box marginTop={1}>
         {columns.map((column) => (
@@ -459,7 +505,12 @@ export function renderTable<T>(input: {
         <Box key={rowIndex}>
           {columns.map((column) => (
             <Box key={column.header} width={column.width + 2}>
-              <Text color={color(input.enableColor, rowIndex % 2 === 0 ? palette.command : palette.accentSoft)}>
+              <Text
+                color={color(
+                  input.enableColor,
+                  rowIndex % 2 === 0 ? palette.command : palette.accentSoft
+                )}
+              >
                 {truncate(column.render(row), column.width)}
               </Text>
             </Box>

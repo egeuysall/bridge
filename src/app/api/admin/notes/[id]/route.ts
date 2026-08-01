@@ -9,6 +9,7 @@ function normalizeVisibility(value: unknown): NoteVisibility {
 }
 
 function normalizeExpiresInDays(value: unknown): number | null {
+  if (value === null) return null;
   if (typeof value !== 'number') return 30;
   if (!Number.isFinite(value) || value <= 0) return 30;
   return Math.min(30, value);
@@ -19,10 +20,7 @@ function normalizeTitle(value: unknown): string {
   return value.trim().replace(/\s+/g, ' ').slice(0, 120);
 }
 
-export async function PATCH(
-  request: Request,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { userId, getToken } = await auth();
   if (!userId) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
 

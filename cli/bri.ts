@@ -6,6 +6,23 @@ import { renderTopHelp, VERSION, normalizeArgv } from './core/shared';
 
 async function main(): Promise<void> {
   const argv = process.argv.slice(2);
+  if (argv[0] === 'mcp') {
+    if (argv.some((arg) => arg === '-h' || arg === '--help' || arg === 'help')) {
+      console.log('bri mcp');
+      console.log('');
+      console.log(
+        'Start the stdio MCP server. Uses BRI_API_KEY/BRI_ENDPOINT or `bri login` config.'
+      );
+      console.log(
+        'Tools: list_notes, read_note, publish_note, list_note_versions, read_note_version, restore_note_version.'
+      );
+      return;
+    }
+
+    await import('../mcp/index');
+    return;
+  }
+
   const wantsTopHelp = argv.some((arg) => arg === '-h' || arg === '--help' || arg === 'help');
   const topLevelOnlyFlags = argv.every((arg) =>
     ['--no-color', '--no-update-check', '-h', '--help', 'help'].includes(arg)
@@ -22,6 +39,7 @@ async function main(): Promise<void> {
       'links',
       'notifications',
       'config',
+      'mcp',
     ].includes(arg)
   );
 

@@ -19,6 +19,22 @@ export type NoteRecord = {
   purgeAt: number | null;
 };
 
+export type NoteVersionMetadataRecord = {
+  id: string;
+  noteId: string;
+  version: number;
+  title: string;
+  slug: string;
+  visibility: NoteVisibility;
+  expiresAt: number | null;
+  createdAt: number;
+  actor: 'owner' | 'api_key' | 'admin' | 'restore';
+};
+
+export type NoteVersionRecord = NoteVersionMetadataRecord & {
+  content: string;
+};
+
 export type ApiKeyRecord = {
   id: string;
   prefix: string;
@@ -102,6 +118,24 @@ export async function getNoteByUsernameAndSlug(input: {
   return data ?? null;
 }
 
+export async function getAdminNoteByUsernameAndSlug(input: {
+  username: string;
+  slug: string;
+  token: string;
+  adminSecret: string;
+}): Promise<NoteRecord | null> {
+  const data = await fetchQuery(
+    api.notes.getAdminByUsernameAndSlug,
+    {
+      username: input.username,
+      slug: input.slug,
+      adminSecret: input.adminSecret,
+    },
+    { token: input.token }
+  );
+  return data ?? null;
+}
+
 export async function expireMyDueNotes(input: { token: string }) {
   return await fetchMutation(api.notes.expireMineDue, {}, { token: input.token });
 }
@@ -135,7 +169,9 @@ export async function listNotesWithApiKey(input: {
   });
 }
 
-export async function listMyNoteInviteSummaries(input: { token: string }): Promise<InviteSummaryRecord[]> {
+export async function listMyNoteInviteSummaries(input: {
+  token: string;
+}): Promise<InviteSummaryRecord[]> {
   const rows = await fetchQuery(api.notes.listInviteSummaryMine, {}, { token: input.token });
   return rows.map((row) => ({
     id: row.noteId as string,
@@ -232,7 +268,11 @@ export async function updateNoteWithApiKey(input: {
 }
 
 export async function softDeleteNote(input: { token: string; noteId: string }) {
-  return await fetchMutation(api.notes.softDelete, { noteId: input.noteId as never }, { token: input.token });
+  return await fetchMutation(
+    api.notes.softDelete,
+    { noteId: input.noteId as never },
+    { token: input.token }
+  );
 }
 
 export async function softDeleteNoteWithApiKey(input: { apiKey: string; noteId: string }) {
@@ -243,7 +283,85 @@ export async function softDeleteNoteWithApiKey(input: { apiKey: string; noteId: 
 }
 
 export async function restoreNote(input: { token: string; noteId: string }) {
-  return await fetchMutation(api.notes.restore, { noteId: input.noteId as never }, { token: input.token });
+  return await fetchMutation(
+    api.notes.restore,
+    { noteId: input.noteId as never },
+    { token: input.token }
+  );
+}
+
+export async function listNoteVersions(input: {
+  token: string;
+  noteId: string;
+  limit: number;
+}): Promise<NoteVersionMetadataRecord[]> {
+  return await fetchQuery(
+    api.notes.listVersionsMine,
+    { noteId: input.noteId as never, limit: input.limit },
+    { token: input.token }
+  );
+}
+
+export async function listNoteVersionsWithApiKey(input: {
+  apiKey: string;
+  noteId: string;
+  limit: number;
+}): Promise<NoteVersionMetadataRecord[]> {
+  return await fetchQuery(api.notes.listVersionsByApiKey, {
+    apiKey: input.apiKey,
+    noteId: input.noteId as never,
+    limit: input.limit,
+  });
+}
+
+export async function getNoteVersion(input: {
+  token: string;
+  noteId: string;
+  versionId: string;
+}): Promise<NoteVersionRecord | null> {
+  const data = await fetchQuery(
+    api.notes.getVersionMine,
+    { noteId: input.noteId as never, versionId: input.versionId as never },
+    { token: input.token }
+  );
+  return data ?? null;
+}
+
+export async function getNoteVersionWithApiKey(input: {
+  apiKey: string;
+  noteId: string;
+  versionId: string;
+}): Promise<NoteVersionRecord | null> {
+  const data = await fetchQuery(api.notes.getVersionByApiKey, {
+    apiKey: input.apiKey,
+    noteId: input.noteId as never,
+    versionId: input.versionId as never,
+  });
+  return data ?? null;
+}
+
+export async function restoreNoteVersion(input: {
+  token: string;
+  noteId: string;
+  versionId: string;
+}) {
+  return await fetchMutation(
+    api.notes.restoreVersion,
+    { noteId: input.noteId as never, versionId: input.versionId as never },
+    { token: input.token }
+  );
+}
+
+export async function restoreNoteVersionWithApiKey(input: {
+  apiKey: string;
+  noteId: string;
+  versionId: string;
+}) {
+  return await fetchMutation(api.notes.restoreVersionByApiKey, {
+    apiKey: input.apiKey,
+    noteId: input.noteId as never,
+    versionId: input.versionId as never,
+  });
 }
 
 export async function permanentlyDeleteNote(input: { token: string; noteId: string }) {
@@ -254,10 +372,7 @@ export async function permanentlyDeleteNote(input: { token: string; noteId: stri
   );
 }
 
-export async function permanentlyDeleteNoteWithApiKey(input: {
-  apiKey: string;
-  noteId: string;
-}) {
+export async function permanentlyDeleteNoteWithApiKey(input: { apiKey: string; noteId: string }) {
   return await fetchMutation(api.notes.permanentlyDeleteWithApiKey, {
     apiKey: input.apiKey,
     noteId: input.noteId as never,
@@ -287,11 +402,55 @@ export async function adminUpdateNote(input: {
   );
 }
 
-export async function trackNotePageView(input: {
-  username: string;
-  slug: string;
-  path: string;
+export async function listAdminNoteVersions(input: {
+  token: string;
+  adminSecret: string;
+  noteId: string;
+  limit: number;
+}): Promise<NoteVersionMetadataRecord[]> {
+  return await fetchQuery(
+    api.notes.listVersionsAdmin,
+    { adminSecret: input.adminSecret, noteId: input.noteId as never, limit: input.limit },
+    { token: input.token }
+  );
+}
+
+export async function getAdminNoteVersion(input: {
+  token: string;
+  adminSecret: string;
+  noteId: string;
+  versionId: string;
+}): Promise<NoteVersionRecord | null> {
+  const data = await fetchQuery(
+    api.notes.getVersionAdmin,
+    {
+      adminSecret: input.adminSecret,
+      noteId: input.noteId as never,
+      versionId: input.versionId as never,
+    },
+    { token: input.token }
+  );
+  return data ?? null;
+}
+
+export async function adminRestoreNoteVersion(input: {
+  token: string;
+  adminSecret: string;
+  noteId: string;
+  versionId: string;
 }) {
+  return await fetchMutation(
+    api.notes.adminRestoreVersion,
+    {
+      adminSecret: input.adminSecret,
+      noteId: input.noteId as never,
+      versionId: input.versionId as never,
+    },
+    { token: input.token }
+  );
+}
+
+export async function trackNotePageView(input: { username: string; slug: string; path: string }) {
   return await fetchMutation(api.notes.trackPageView, {
     username: input.username,
     slug: input.slug,
@@ -329,7 +488,11 @@ export async function createApiKeyHashed(input: {
 }
 
 export async function revokeApiKey(input: { token: string; keyId: string }) {
-  return await fetchMutation(api.apiKeys.revokeMine, { keyId: input.keyId as never }, { token: input.token });
+  return await fetchMutation(
+    api.apiKeys.revokeMine,
+    { keyId: input.keyId as never },
+    { token: input.token }
+  );
 }
 
 export async function listQuickLinks(input: { token: string }): Promise<QuickLinkRecord[]> {

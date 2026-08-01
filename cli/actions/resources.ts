@@ -11,10 +11,12 @@ import {
   type LinksListOptions,
   type LinksUpdateOptions,
   type NotesDeleteOptions,
+  type NotesRestoreVersionOptions,
   type NotesListOptions,
   type NotesReadOptions,
   type NotesAskOptions,
   type NotesUpdateOptions,
+  type NotesVersionOptions,
   type NotificationsActionOptions,
   type NotificationsListOptions,
   getStringSetting,
@@ -27,6 +29,7 @@ import {
   printJson,
   readMarkdownFile,
   readMarkdownStdin,
+  validateResourceId,
   validateUrl,
   type CommandLike,
 } from '../core/shared';
@@ -50,7 +53,10 @@ export async function runNotesList(options: NotesListOptions, command: CommandLi
 
   const data = (await fetchWithApiKey({ endpoint, apiKey })) as Array<Record<string, unknown>>;
   if (options.json) {
-    printJson({ data }, optionProvidedByCli(command, 'color') ? options.color : process.stdout.isTTY);
+    printJson(
+      { data },
+      optionProvidedByCli(command, 'color') ? options.color : process.stdout.isTTY
+    );
     return;
   }
 
@@ -82,7 +88,11 @@ export async function runNotesList(options: NotesListOptions, command: CommandLi
           return `${username}/${slug}`;
         },
       },
-      { header: 'title', width: 42, render: (row) => (typeof row.title === 'string' ? row.title : 'untitled') },
+      {
+        header: 'title',
+        width: 42,
+        render: (row) => (typeof row.title === 'string' ? row.title : 'untitled'),
+      },
     ],
   });
 }
@@ -95,10 +105,13 @@ export async function runNotesRead(
 ): Promise<void> {
   const config = await loadConfig();
   const siteRaw = optionProvidedByCli(command, 'endpoint')
-    ? options.endpoint ?? DEFAULT_SITE_URL
+    ? (options.endpoint ?? DEFAULT_SITE_URL)
     : (process.env.BRI_SITE_URL ?? config.siteUrl ?? DEFAULT_SITE_URL);
   const base = validateUrl(siteRaw, 'site-url');
-  const endpoint = new URL(`/api/public/notes/${encodeURIComponent(username)}/${encodeURIComponent(slug)}`, base);
+  const endpoint = new URL(
+    `/api/public/notes/${encodeURIComponent(username)}/${encodeURIComponent(slug)}`,
+    base
+  );
   const apiKey = (config.apiKey || process.env.BRI_API_KEY || '').trim();
 
   const response = await fetch(endpoint, {
@@ -110,7 +123,10 @@ export async function runNotesRead(
   if (!response.ok) throw new Error(parsed.error || `request failed (${response.status})`);
 
   if (options.json) {
-    printJson(parsed.data ?? {}, optionProvidedByCli(command, 'color') ? options.color : process.stdout.isTTY);
+    printJson(
+      parsed.data ?? {},
+      optionProvidedByCli(command, 'color') ? options.color : process.stdout.isTTY
+    );
     return;
   }
 
@@ -118,6 +134,99 @@ export async function runNotesRead(
   console.log(data.title || `${username}/${slug}`);
   console.log('');
   console.log(data.content || '');
+}
+
+function getApiKey(configApiKey?: string): string {
+  const apiKey = (configApiKey || process.env.BRI_API_KEY || '').trim();
+  if (!apiKey) throw new Error('missing api key. run `bri login --api-key <key>`');
+  return apiKey;
+}
+
+function getNotesByIdEndpoint(
+  command: CommandLike,
+  options: { endpoint?: string },
+  configEndpoint: string | undefined,
+  noteId: string
+): URL {
+  const endpointRaw = getStringSetting(
+    command,
+    'endpoint',
+    options.endpoint,
+    process.env.BRI_ENDPOINT,
+    configEndpoint,
+    DEFAULT_API_ENDPOINT
+  );
+  return new URL(
+    `/api/notes/by-id/${encodeURIComponent(validateResourceId(noteId, 'note id'))}`,
+    validateUrl(endpointRaw, 'endpoint')
+  );
+}
+
+export async function runNotesHistory(
+  id: string,
+  options: NotesVersionOptions,
+  command: CommandLike
+): Promise<void> {
+  const config = await loadConfig();
+  const endpoint = getNotesByIdEndpoint(command, options, config.endpoint, id);
+  endpoint.pathname = `${endpoint.pathname}/versions`;
+  const apiKey = getApiKey(config.apiKey);
+
+  const data = (await fetchWithApiKey({ endpoint, apiKey })) as Array<Record<string, unknown>>;
+  if (options.json) {
+    printJson(
+      { data },
+      optionProvidedByCli(command, 'color') ? options.color : process.stdout.isTTY
+    );
+    return;
+  }
+
+  renderTable({
+    title: 'bri note versions',
+    rows: Array.isArray(data) ? data : [],
+    enableColor: optionProvidedByCli(command, 'color') ? options.color : process.stdout.isTTY,
+    empty: 'no versions',
+    columns: [
+      { header: 'id', width: 18, render: (row) => (typeof row.id === 'string' ? row.id : '') },
+      {
+        header: 'title',
+        width: 38,
+        render: (row) => (typeof row.title === 'string' ? row.title : 'untitled'),
+      },
+      {
+        header: 'updated',
+        width: 22,
+        render: (row) =>
+          typeof row.createdAt === 'number' ? new Date(row.createdAt).toISOString() : '',
+      },
+    ],
+  });
+}
+
+export async function runNotesVersion(
+  noteId: string,
+  versionId: string,
+  options: NotesVersionOptions,
+  command: CommandLike
+): Promise<void> {
+  const config = await loadConfig();
+  const endpoint = getNotesByIdEndpoint(command, options, config.endpoint, noteId);
+  endpoint.pathname = `${endpoint.pathname}/versions`;
+  endpoint.searchParams.set('versionId', validateResourceId(versionId, 'version id'));
+  const apiKey = getApiKey(config.apiKey);
+
+  const data = (await fetchWithApiKey({ endpoint, apiKey })) as Record<string, unknown>;
+  if (options.json) {
+    printJson(
+      { data },
+      optionProvidedByCli(command, 'color') ? options.color : process.stdout.isTTY
+    );
+    return;
+  }
+
+  console.log(typeof data.title === 'string' ? data.title : versionId);
+  console.log('');
+  console.log(typeof data.content === 'string' ? data.content : '');
 }
 
 export async function runNotesAsk(
@@ -128,7 +237,7 @@ export async function runNotesAsk(
 ): Promise<void> {
   const config = await loadConfig();
   const siteRaw = optionProvidedByCli(command, 'endpoint')
-    ? options.endpoint ?? DEFAULT_SITE_URL
+    ? (options.endpoint ?? DEFAULT_SITE_URL)
     : (process.env.BRI_SITE_URL ?? config.siteUrl ?? DEFAULT_SITE_URL);
   const base = validateUrl(siteRaw, 'site-url');
   const endpoint = new URL(
@@ -209,22 +318,14 @@ export async function runNotesAsk(
   }
 }
 
-export async function runNotesUpdate(id: string, options: NotesUpdateOptions, command: CommandLike): Promise<void> {
+export async function runNotesUpdate(
+  id: string,
+  options: NotesUpdateOptions,
+  command: CommandLike
+): Promise<void> {
   const config = await loadConfig();
-  const apiKey = (config.apiKey || process.env.BRI_API_KEY || '').trim();
-  if (!apiKey) throw new Error('missing api key. run `bri login --api-key <key>`');
-
-  const endpointRaw = getStringSetting(
-    command,
-    'endpoint',
-    options.endpoint,
-    process.env.BRI_ENDPOINT,
-    config.endpoint,
-    DEFAULT_API_ENDPOINT
-  );
-
-  const baseEndpoint = validateUrl(endpointRaw, 'endpoint');
-  const endpoint = new URL(`/api/notes/by-id/${encodeURIComponent(id)}`, baseEndpoint);
+  const apiKey = getApiKey(config.apiKey);
+  const endpoint = getNotesByIdEndpoint(command, options, config.endpoint, id);
 
   const maxBytes = optionProvidedByCli(command, 'maxBytes')
     ? parsePositiveInt(options.maxBytes, 'max-bytes')
@@ -261,7 +362,10 @@ export async function runNotesUpdate(id: string, options: NotesUpdateOptions, co
   });
 
   if (options.json) {
-    printJson({ data }, optionProvidedByCli(command, 'color') ? options.color : process.stdout.isTTY);
+    printJson(
+      { data },
+      optionProvidedByCli(command, 'color') ? options.color : process.stdout.isTTY
+    );
     return;
   }
   renderPanel({
@@ -271,21 +375,14 @@ export async function runNotesUpdate(id: string, options: NotesUpdateOptions, co
   });
 }
 
-export async function runNotesDelete(id: string, options: NotesDeleteOptions, command: CommandLike): Promise<void> {
+export async function runNotesDelete(
+  id: string,
+  options: NotesDeleteOptions,
+  command: CommandLike
+): Promise<void> {
   const config = await loadConfig();
-  const apiKey = (config.apiKey || process.env.BRI_API_KEY || '').trim();
-  if (!apiKey) throw new Error('missing api key. run `bri login --api-key <key>`');
-
-  const endpointRaw = getStringSetting(
-    command,
-    'endpoint',
-    options.endpoint,
-    process.env.BRI_ENDPOINT,
-    config.endpoint,
-    DEFAULT_API_ENDPOINT
-  );
-  const baseEndpoint = validateUrl(endpointRaw, 'endpoint');
-  const endpoint = new URL(`/api/notes/by-id/${encodeURIComponent(id)}`, baseEndpoint);
+  const apiKey = getApiKey(config.apiKey);
+  const endpoint = getNotesByIdEndpoint(command, options, config.endpoint, id);
 
   const action = options.permanent ? 'permanentDelete' : 'softDelete';
   const data = await fetchWithApiKey({
@@ -296,13 +393,50 @@ export async function runNotesDelete(id: string, options: NotesDeleteOptions, co
   });
 
   if (options.json) {
-    printJson({ data }, optionProvidedByCli(command, 'color') ? options.color : process.stdout.isTTY);
+    printJson(
+      { data },
+      optionProvidedByCli(command, 'color') ? options.color : process.stdout.isTTY
+    );
     return;
   }
   renderPanel({
     title: 'bri note',
     enableColor: optionProvidedByCli(command, 'color') ? options.color : process.stdout.isTTY,
-    rows: [{ label: 'status', value: options.permanent ? 'deleted forever' : 'deleted', tone: 'ok' }],
+    rows: [
+      { label: 'status', value: options.permanent ? 'deleted forever' : 'deleted', tone: 'ok' },
+    ],
+  });
+}
+
+export async function runNotesRestoreVersion(
+  noteId: string,
+  versionId: string,
+  options: NotesRestoreVersionOptions,
+  command: CommandLike
+): Promise<void> {
+  const config = await loadConfig();
+  const apiKey = getApiKey(config.apiKey);
+  const endpoint = getNotesByIdEndpoint(command, options, config.endpoint, noteId);
+  endpoint.pathname = `${endpoint.pathname}/versions`;
+
+  const data = await fetchWithApiKey({
+    endpoint,
+    apiKey,
+    method: 'PATCH',
+    body: { action: 'restore', versionId: validateResourceId(versionId, 'version id') },
+  });
+
+  if (options.json) {
+    printJson(
+      { data },
+      optionProvidedByCli(command, 'color') ? options.color : process.stdout.isTTY
+    );
+    return;
+  }
+  renderPanel({
+    title: 'bri note',
+    enableColor: optionProvidedByCli(command, 'color') ? options.color : process.stdout.isTTY,
+    rows: [{ label: 'status', value: 'version restored', tone: 'ok' }],
   });
 }
 
@@ -324,7 +458,10 @@ export async function runLinksList(options: LinksListOptions, command: CommandLi
 
   const data = (await fetchWithApiKey({ endpoint, apiKey })) as Array<Record<string, unknown>>;
   if (options.json) {
-    printJson({ data }, optionProvidedByCli(command, 'color') ? options.color : process.stdout.isTTY);
+    printJson(
+      { data },
+      optionProvidedByCli(command, 'color') ? options.color : process.stdout.isTTY
+    );
     return;
   }
 
@@ -356,7 +493,11 @@ export async function runLinksList(options: LinksListOptions, command: CommandLi
           return `${username}/${key}`;
         },
       },
-      { header: 'target', width: 42, render: (row) => (typeof row.targetUrl === 'string' ? row.targetUrl : '') },
+      {
+        header: 'target',
+        width: 42,
+        render: (row) => (typeof row.targetUrl === 'string' ? row.targetUrl : ''),
+      },
       {
         header: 'clicks',
         width: 8,
@@ -366,7 +507,10 @@ export async function runLinksList(options: LinksListOptions, command: CommandLi
   });
 }
 
-export async function runLinksCreate(options: LinksCreateOptions, command: CommandLike): Promise<void> {
+export async function runLinksCreate(
+  options: LinksCreateOptions,
+  command: CommandLike
+): Promise<void> {
   const config = await loadConfig();
   const apiKey = (config.apiKey || process.env.BRI_API_KEY || '').trim();
   if (!apiKey) throw new Error('missing api key. run `bri login --api-key <key>`');
@@ -399,7 +543,10 @@ export async function runLinksCreate(options: LinksCreateOptions, command: Comma
   });
 
   if (options.json) {
-    printJson({ data }, optionProvidedByCli(command, 'color') ? options.color : process.stdout.isTTY);
+    printJson(
+      { data },
+      optionProvidedByCli(command, 'color') ? options.color : process.stdout.isTTY
+    );
     return;
   }
   renderPanel({
@@ -412,7 +559,11 @@ export async function runLinksCreate(options: LinksCreateOptions, command: Comma
   });
 }
 
-export async function runLinksUpdate(id: string, options: LinksUpdateOptions, command: CommandLike): Promise<void> {
+export async function runLinksUpdate(
+  id: string,
+  options: LinksUpdateOptions,
+  command: CommandLike
+): Promise<void> {
   const config = await loadConfig();
   const apiKey = (config.apiKey || process.env.BRI_API_KEY || '').trim();
   if (!apiKey) throw new Error('missing api key. run `bri login --api-key <key>`');
@@ -445,7 +596,10 @@ export async function runLinksUpdate(id: string, options: LinksUpdateOptions, co
   });
 
   if (options.json) {
-    printJson({ data }, optionProvidedByCli(command, 'color') ? options.color : process.stdout.isTTY);
+    printJson(
+      { data },
+      optionProvidedByCli(command, 'color') ? options.color : process.stdout.isTTY
+    );
     return;
   }
   renderPanel({
@@ -458,7 +612,11 @@ export async function runLinksUpdate(id: string, options: LinksUpdateOptions, co
   });
 }
 
-export async function runLinksDelete(id: string, options: LinksDeleteOptions, command: CommandLike): Promise<void> {
+export async function runLinksDelete(
+  id: string,
+  options: LinksDeleteOptions,
+  command: CommandLike
+): Promise<void> {
   const config = await loadConfig();
   const apiKey = (config.apiKey || process.env.BRI_API_KEY || '').trim();
   if (!apiKey) throw new Error('missing api key. run `bri login --api-key <key>`');
@@ -477,7 +635,10 @@ export async function runLinksDelete(id: string, options: LinksDeleteOptions, co
   const data = await fetchWithApiKey({ endpoint, apiKey, method: 'DELETE' });
 
   if (options.json) {
-    printJson({ data }, optionProvidedByCli(command, 'color') ? options.color : process.stdout.isTTY);
+    printJson(
+      { data },
+      optionProvidedByCli(command, 'color') ? options.color : process.stdout.isTTY
+    );
     return;
   }
 
@@ -527,7 +688,10 @@ export async function runInvite(
   });
 
   if (options.json) {
-    printJson({ data }, optionProvidedByCli(command, 'color') ? options.color : process.stdout.isTTY);
+    printJson(
+      { data },
+      optionProvidedByCli(command, 'color') ? options.color : process.stdout.isTTY
+    );
     return;
   }
   renderPanel({
@@ -572,7 +736,10 @@ export async function runNotificationsList(
   };
 
   if (options.json) {
-    printJson({ data }, optionProvidedByCli(command, 'color') ? options.color : process.stdout.isTTY);
+    printJson(
+      { data },
+      optionProvidedByCli(command, 'color') ? options.color : process.stdout.isTTY
+    );
     return;
   }
 
@@ -595,12 +762,21 @@ export async function runNotificationsList(
     empty: 'no notifications',
     columns: [
       { header: 'id', width: 16, render: (row) => (typeof row.id === 'string' ? row.id : '') },
-      { header: 'kind', width: 12, render: (row) => (typeof row.kind === 'string' ? row.kind : 'notice') },
-      { header: 'message', width: 48, render: (row) => (typeof row.message === 'string' ? row.message : '') },
+      {
+        header: 'kind',
+        width: 12,
+        render: (row) => (typeof row.kind === 'string' ? row.kind : 'notice'),
+      },
+      {
+        header: 'message',
+        width: 48,
+        render: (row) => (typeof row.message === 'string' ? row.message : ''),
+      },
       {
         header: 'created',
         width: 24,
-        render: (row) => (typeof row.createdAt === 'number' ? new Date(row.createdAt).toISOString() : 'unknown'),
+        render: (row) =>
+          typeof row.createdAt === 'number' ? new Date(row.createdAt).toISOString() : 'unknown',
       },
     ],
   });
@@ -641,7 +817,10 @@ export async function runNotificationsOpen(
   const href = typeof data?.href === 'string' ? data.href : null;
 
   if (options.json) {
-    printJson({ data }, optionProvidedByCli(command, 'color') ? options.color : process.stdout.isTTY);
+    printJson(
+      { data },
+      optionProvidedByCli(command, 'color') ? options.color : process.stdout.isTTY
+    );
     return;
   }
 
@@ -697,7 +876,10 @@ export async function runNotificationsDismiss(
   });
 
   if (options.json) {
-    printJson({ data }, optionProvidedByCli(command, 'color') ? options.color : process.stdout.isTTY);
+    printJson(
+      { data },
+      optionProvidedByCli(command, 'color') ? options.color : process.stdout.isTTY
+    );
     return;
   }
 
