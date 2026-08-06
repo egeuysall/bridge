@@ -1,5 +1,6 @@
 import { MarkdownAsync } from 'react-markdown';
 import rehypeKatex from 'rehype-katex';
+import rehypeSlug from 'rehype-slug';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
 import { normalizeMarkdownTables } from '@/lib/tiptap-markdown';
@@ -17,6 +18,7 @@ import {
   MarkdownCheckbox,
 } from './index';
 import { markdownUrlTransform } from './url-transform';
+import { MarkdownHashScroller } from './markdown-hash-scroller';
 
 interface MarkdownContentProps {
   postId: string;
@@ -25,11 +27,16 @@ interface MarkdownContentProps {
 
 export async function MarkdownContent({ postId, content }: MarkdownContentProps) {
   return (
-    <MarkdownAsync
-      remarkPlugins={[remarkGfm, remarkMath]}
-      rehypePlugins={[[rehypeKatex, { strict: 'warn', throwOnError: false, trust: false, output: 'mathml' }]]}
-      urlTransform={markdownUrlTransform}
-      components={{
+    <>
+      <MarkdownHashScroller />
+      <MarkdownAsync
+        remarkPlugins={[remarkGfm, remarkMath]}
+        rehypePlugins={[
+          [rehypeSlug, { prefix: 'user-content-' }],
+          [rehypeKatex, { strict: 'warn', throwOnError: false, trust: false, output: 'mathml' }],
+        ]}
+        urlTransform={markdownUrlTransform}
+        components={{
         pre: ({ children }) => <>{children}</>,
         code: ({ className, children, ...props }) => {
           const normalizedContent = String(children);
@@ -74,9 +81,10 @@ export async function MarkdownContent({ postId, content }: MarkdownContentProps)
           }
           return <input type={type} checked={checked} readOnly />;
         },
-      }}
-    >
-      {normalizeMarkdownTables(content)}
-    </MarkdownAsync>
+        }}
+      >
+        {normalizeMarkdownTables(content)}
+      </MarkdownAsync>
+    </>
   );
 }

@@ -170,6 +170,10 @@ body {
     'Liberation Mono', 'Courier New', monospace;
 }
 
+html {
+  scroll-behavior: smooth;
+}
+
 body {
   line-height: 1.5;
   overflow-x: hidden;
@@ -401,6 +405,10 @@ a {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
   *,
   *::before,
   *::after {
@@ -452,6 +460,10 @@ a {
   font-size: 0.82rem;
   line-height: 1.4;
   color: var(--color-neutral-100);
+}
+
+.prose :where(h1, h2, h3, h4, h5, h6)[id] {
+  scroll-margin-top: 1rem;
 }
 
 .prose ul,
