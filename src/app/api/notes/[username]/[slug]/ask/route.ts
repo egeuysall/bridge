@@ -9,7 +9,11 @@ import {
   parseAiNoteRequest,
 } from '@/lib/ai-overlay';
 import { getNoteByUsernameAndSlug } from '@/lib/notes';
-import { readBridgeApiKeyFromRequest, rejectCrossOriginMutation } from '@/lib/request-security';
+import {
+  readBridgeApiKeyAuthFromRequest,
+  rejectCookieBackedCrossOriginMutation,
+  rejectCrossOriginMutation,
+} from '@/lib/request-security';
 
 export const runtime = 'nodejs';
 export const maxDuration = 30;
@@ -61,14 +65,16 @@ export async function POST(
     return NextResponse.json({ error: 'AI is not configured' }, { status: 503 });
   }
 
-  const bridgeApiKey = readBridgeApiKeyFromRequest(request);
+  const bridgeApiKeyAuth = await readBridgeApiKeyAuthFromRequest(request);
+  const cookieBlocked = rejectCookieBackedCrossOriginMutation(request, bridgeApiKeyAuth);
+  if (cookieBlocked) return cookieBlocked;
   const { getToken } = await auth();
   const token = (await getToken({ template: 'convex' })) ?? (await getToken()) ?? null;
 
   const note = await getNoteByUsernameAndSlug({
     username: parsed.username,
     slug: parsed.slug,
-    apiKey: bridgeApiKey,
+    apiKey: bridgeApiKeyAuth?.apiKey ?? null,
     token,
   });
 

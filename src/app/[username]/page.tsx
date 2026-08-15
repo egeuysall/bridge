@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { auth, currentUser } from '@clerk/nextjs/server';
+import { headers } from 'next/headers';
 import { UserDashboard } from '@/components/dashboard/user-dashboard';
 import { PublicProfileAvatar } from '@/components/public-profile-avatar';
 import { formatQuickLinkTitle } from '@/lib/quick-link-display';
@@ -10,6 +11,7 @@ import {
   listPublicNotesByUsername,
   listQuickLinksByUsername,
 } from '@/lib/notes';
+import { getBridgeApiKeySessionFromRequest } from '@/lib/request-security';
 import {
   isPublicUsernamePath,
   normalizePathHandle,
@@ -48,6 +50,7 @@ export default async function DashboardPage({
 
   const { sessionClaims, userId, getToken } = await auth();
   let userHandle = resolveUserHandle(sessionClaims as Record<string, unknown> | null | undefined);
+  let apiKeySession: Awaited<ReturnType<typeof getBridgeApiKeySessionFromRequest>> = null;
 
   if (!userHandle && userId) {
     const token = (await getToken({ template: 'convex' })) ?? (await getToken()) ?? null;
@@ -65,8 +68,16 @@ export default async function DashboardPage({
     if (fallbackHandle) userHandle = fallbackHandle;
   }
 
+  if (!userHandle) {
+    const cookieHeader = (await headers()).get('cookie') ?? '';
+    apiKeySession = await getBridgeApiKeySessionFromRequest(
+      new Request('http://bri.local', { headers: { cookie: cookieHeader } })
+    );
+    if (apiKeySession?.username) userHandle = normalizePathHandle(apiKeySession.username);
+  }
+
   if (!forcePublicProfile && userHandle && normalizedPathHandle === userHandle) {
-    return <UserDashboard />;
+    return <UserDashboard apiKeySession={Boolean(apiKeySession)} />;
   }
 
   const [profile, notes, links] = await Promise.all([

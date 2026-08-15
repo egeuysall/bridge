@@ -1,7 +1,9 @@
 import type { CSSProperties } from 'react';
 import { redirect } from 'next/navigation';
 import { auth, currentUser } from '@clerk/nextjs/server';
+import { headers } from 'next/headers';
 import { CliSection } from '@/components/blocks/cli-copy';
+import { getBridgeApiKeySessionFromRequest } from '@/lib/request-security';
 import { resolveUserHandle, resolveUserHandleFromUser } from '@/lib/user-handle';
 
 const Landing = async () => {
@@ -21,6 +23,14 @@ const Landing = async () => {
     if (handle) {
       redirect(`/${handle}`);
     }
+  }
+
+  const cookieHeader = (await headers()).get('cookie') ?? '';
+  const apiKeySession = await getBridgeApiKeySessionFromRequest(
+    new Request('http://bri.local', { headers: { cookie: cookieHeader } })
+  );
+  if (apiKeySession?.username) {
+    redirect(`/${apiKeySession.username}`);
   }
 
   return (

@@ -8,7 +8,8 @@ import {
 } from '@/lib/notes';
 import {
   normalizeResourceId,
-  readBridgeApiKeyFromRequest,
+  readBridgeApiKeyAuthFromRequest,
+  rejectCookieBackedCrossOriginMutation,
   rejectCrossOriginMutation,
 } from '@/lib/request-security';
 
@@ -63,8 +64,12 @@ export async function PATCH(
     const blocked = rejectCrossOriginMutation(request);
     if (blocked) return blocked;
   }
-  const apiKey = token ? null : readBridgeApiKeyFromRequest(request);
-  if (!token && !apiKey) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  const apiKeyAuth = token ? null : await readBridgeApiKeyAuthFromRequest(request);
+  if (!token && !apiKeyAuth) {
+    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  }
+  const cookieBlocked = rejectCookieBackedCrossOriginMutation(request, apiKeyAuth);
+  if (cookieBlocked) return cookieBlocked;
 
   try {
     const data = token
@@ -76,7 +81,7 @@ export async function PATCH(
           label,
         })
       : await updateQuickLinkWithApiKey({
-          apiKey: apiKey as string,
+          apiKey: apiKeyAuth?.apiKey as string,
           linkId: id,
           key,
           targetUrl,
@@ -113,13 +118,17 @@ export async function DELETE(
     const blocked = rejectCrossOriginMutation(request);
     if (blocked) return blocked;
   }
-  const apiKey = token ? null : readBridgeApiKeyFromRequest(request);
-  if (!token && !apiKey) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  const apiKeyAuth = token ? null : await readBridgeApiKeyAuthFromRequest(request);
+  if (!token && !apiKeyAuth) {
+    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  }
+  const cookieBlocked = rejectCookieBackedCrossOriginMutation(request, apiKeyAuth);
+  if (cookieBlocked) return cookieBlocked;
 
   try {
     const data = token
       ? await removeQuickLink({ token, linkId: id })
-      : await removeQuickLinkWithApiKey({ apiKey: apiKey as string, linkId: id });
+      : await removeQuickLinkWithApiKey({ apiKey: apiKeyAuth?.apiKey as string, linkId: id });
     return NextResponse.json({ data });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to remove quick link';

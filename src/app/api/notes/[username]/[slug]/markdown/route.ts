@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
 import { getNoteByUsernameAndSlug } from '@/lib/notes';
 import { getMarkdownAlias } from '@/lib/post-slugs';
-import { readBridgeApiKeyFromRequest } from '@/lib/request-security';
+import { readBridgeApiKeyAuthFromRequest } from '@/lib/request-security';
 import { normalizeMarkdownTables } from '@/lib/tiptap-markdown';
 
 function getFilename(username: string, slug: string): string {
@@ -15,14 +15,14 @@ export async function GET(
   { params }: { params: Promise<{ username: string; slug: string }> }
 ) {
   const { username, slug } = await params;
-  const apiKey = readBridgeApiKeyFromRequest(request);
+  const apiKeyAuth = await readBridgeApiKeyAuthFromRequest(request);
   const { getToken } = await auth();
   const token = (await getToken({ template: 'convex' })) ?? (await getToken()) ?? null;
 
   const note = await getNoteByUsernameAndSlug({
     username,
     slug,
-    apiKey,
+    apiKey: apiKeyAuth?.apiKey ?? null,
     token,
   });
 

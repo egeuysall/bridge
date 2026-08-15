@@ -12,7 +12,8 @@ import {
 } from '@/lib/notes';
 import {
   normalizeResourceId,
-  readBridgeApiKeyFromRequest,
+  readBridgeApiKeyAuthFromRequest,
+  rejectCookieBackedCrossOriginMutation,
   rejectCrossOriginMutation,
 } from '@/lib/request-security';
 import { normalizeMarkdownTables } from '@/lib/tiptap-markdown';
@@ -70,17 +71,19 @@ export async function PATCH(
     if (blocked) return blocked;
   }
 
-  const apiKey = token ? null : readBridgeApiKeyFromRequest(request);
+  const apiKeyAuth = token ? null : await readBridgeApiKeyAuthFromRequest(request);
 
-  if (!token && !apiKey) {
+  if (!token && !apiKeyAuth) {
     return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
   }
+  const cookieBlocked = rejectCookieBackedCrossOriginMutation(request, apiKeyAuth);
+  if (cookieBlocked) return cookieBlocked;
 
   try {
     if (action === 'softDelete') {
       const data = token
         ? await softDeleteNote({ token, noteId: id })
-        : await softDeleteNoteWithApiKey({ apiKey: apiKey as string, noteId: id });
+        : await softDeleteNoteWithApiKey({ apiKey: apiKeyAuth?.apiKey as string, noteId: id });
       return NextResponse.json({ data });
     }
 
@@ -95,7 +98,10 @@ export async function PATCH(
     if (action === 'permanentDelete') {
       const data = token
         ? await permanentlyDeleteNote({ token, noteId: id })
-        : await permanentlyDeleteNoteWithApiKey({ apiKey: apiKey as string, noteId: id });
+        : await permanentlyDeleteNoteWithApiKey({
+            apiKey: apiKeyAuth?.apiKey as string,
+            noteId: id,
+          });
       return NextResponse.json({ data });
     }
 
@@ -122,7 +128,7 @@ export async function PATCH(
           expiresInDays,
         })
       : await updateNoteWithApiKey({
-          apiKey: apiKey as string,
+          apiKey: apiKeyAuth?.apiKey as string,
           noteId: id,
           title,
           content,

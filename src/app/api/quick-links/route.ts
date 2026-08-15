@@ -6,7 +6,11 @@ import {
   listQuickLinks,
   listQuickLinksWithApiKey,
 } from '@/lib/notes';
-import { readBridgeApiKeyFromRequest, rejectCrossOriginMutation } from '@/lib/request-security';
+import {
+  readBridgeApiKeyAuthFromRequest,
+  rejectCookieBackedCrossOriginMutation,
+  rejectCrossOriginMutation,
+} from '@/lib/request-security';
 import { resolveUserHandle, resolveUserHandleFromUser } from '@/lib/user-handle';
 
 function statusFromErrorMessage(message: string): number {
@@ -56,11 +60,11 @@ export async function GET(request: Request) {
     }
   }
 
-  const apiKey = readBridgeApiKeyFromRequest(request);
-  if (!apiKey) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  const apiKeyAuth = await readBridgeApiKeyAuthFromRequest(request);
+  if (!apiKeyAuth) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
 
   try {
-    const data = await listQuickLinksWithApiKey({ apiKey });
+    const data = await listQuickLinksWithApiKey({ apiKey: apiKeyAuth.apiKey });
     return NextResponse.json({ data });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to fetch quick links';
@@ -131,14 +135,16 @@ export async function POST(request: Request) {
     }
   }
 
-  const apiKey = readBridgeApiKeyFromRequest(request);
-  if (!apiKey) {
+  const apiKeyAuth = await readBridgeApiKeyAuthFromRequest(request);
+  if (!apiKeyAuth) {
     return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
   }
+  const blocked = rejectCookieBackedCrossOriginMutation(request, apiKeyAuth);
+  if (blocked) return blocked;
 
   try {
     const data = await createQuickLinkWithApiKey({
-      apiKey,
+      apiKey: apiKeyAuth.apiKey,
       key,
       targetUrl,
       label,

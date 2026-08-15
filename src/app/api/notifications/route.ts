@@ -10,7 +10,8 @@ import {
 } from '@/lib/notes';
 import {
   normalizeResourceId,
-  readBridgeApiKeyFromRequest,
+  readBridgeApiKeyAuthFromRequest,
+  rejectCookieBackedCrossOriginMutation,
   rejectCrossOriginMutation,
 } from '@/lib/request-security';
 
@@ -22,13 +23,13 @@ async function requireToken() {
 
 export async function GET(request: Request) {
   const token = await requireToken();
-  const apiKey = token ? null : readBridgeApiKeyFromRequest(request);
-  if (!token && !apiKey) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  const apiKeyAuth = token ? null : await readBridgeApiKeyAuthFromRequest(request);
+  if (!token && !apiKeyAuth) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
 
   try {
     const data = token
       ? await listMyNotifications({ token })
-      : await listNotificationsWithApiKey({ apiKey: apiKey as string });
+      : await listNotificationsWithApiKey({ apiKey: apiKeyAuth?.apiKey as string });
     return NextResponse.json({ data });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to load notifications';
@@ -44,11 +45,13 @@ export async function GET(request: Request) {
 
 export async function PATCH(request: Request) {
   const token = await requireToken();
-  const apiKey = token ? null : readBridgeApiKeyFromRequest(request);
-  if (!token && !apiKey) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  const apiKeyAuth = token ? null : await readBridgeApiKeyAuthFromRequest(request);
+  if (!token && !apiKeyAuth) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
 
   const blocked = rejectCrossOriginMutation(request);
   if (blocked) return blocked;
+  const cookieBlocked = rejectCookieBackedCrossOriginMutation(request, apiKeyAuth);
+  if (cookieBlocked) return cookieBlocked;
 
   let payload: { action?: unknown; notificationId?: unknown };
   try {
@@ -75,7 +78,7 @@ export async function PATCH(request: Request) {
             notificationId,
           })
         : await dismissNotificationWithApiKey({
-            apiKey: apiKey as string,
+            apiKey: apiKeyAuth?.apiKey as string,
             notificationId,
           });
       return NextResponse.json({ data });
@@ -87,7 +90,7 @@ export async function PATCH(request: Request) {
           notificationId,
         })
       : await resolveNotificationTargetWithApiKey({
-          apiKey: apiKey as string,
+          apiKey: apiKeyAuth?.apiKey as string,
           notificationId,
         });
     return NextResponse.json({ data });

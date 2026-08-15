@@ -6,7 +6,7 @@ import {
   listNoteInviteSummariesWithApiKey,
   listQuickLinkInviteSummariesWithApiKey,
 } from '@/lib/notes';
-import { readBridgeApiKeyFromRequest } from '@/lib/request-security';
+import { readBridgeApiKeyAuthFromRequest } from '@/lib/request-security';
 
 async function requireToken() {
   try {
@@ -20,8 +20,8 @@ async function requireToken() {
 
 export async function GET(request: Request) {
   const token = await requireToken();
-  const apiKey = token ? null : readBridgeApiKeyFromRequest(request);
-  if (!token && !apiKey) {
+  const apiKeyAuth = token ? null : await readBridgeApiKeyAuthFromRequest(request);
+  if (!token && !apiKeyAuth) {
     return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
   }
 
@@ -32,8 +32,8 @@ export async function GET(request: Request) {
           listMyQuickLinkInviteSummaries({ token }),
         ])
       : await Promise.all([
-          listNoteInviteSummariesWithApiKey({ apiKey: apiKey as string }),
-          listQuickLinkInviteSummariesWithApiKey({ apiKey: apiKey as string }),
+          listNoteInviteSummariesWithApiKey({ apiKey: apiKeyAuth?.apiKey as string }),
+          listQuickLinkInviteSummariesWithApiKey({ apiKey: apiKeyAuth?.apiKey as string }),
         ]);
 
     return NextResponse.json({ data: { notes, links } });

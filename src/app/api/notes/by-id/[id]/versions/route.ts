@@ -10,7 +10,8 @@ import {
 } from '@/lib/notes';
 import {
   normalizeResourceId,
-  readBridgeApiKeyFromRequest,
+  readBridgeApiKeyAuthFromRequest,
+  rejectCookieBackedCrossOriginMutation,
   rejectCrossOriginMutation,
 } from '@/lib/request-security';
 
@@ -40,8 +41,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   if (!id) return NextResponse.json({ error: 'Invalid note id' }, { status: 400 });
 
   const token = await requireConvexToken();
-  const apiKey = token ? null : readBridgeApiKeyFromRequest(request);
-  if (!token && !apiKey) {
+  const apiKeyAuth = token ? null : await readBridgeApiKeyAuthFromRequest(request);
+  if (!token && !apiKeyAuth) {
     return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
   }
 
@@ -57,7 +58,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       const data = token
         ? await getNoteVersion({ token, noteId: id, versionId: normalizedVersionId })
         : await getNoteVersionWithApiKey({
-            apiKey: apiKey as string,
+            apiKey: apiKeyAuth?.apiKey as string,
             noteId: id,
             versionId: normalizedVersionId,
           });
@@ -68,7 +69,11 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     const limit = clampLimit(searchParams.get('limit'));
     const data = token
       ? await listNoteVersions({ token, noteId: id, limit })
-      : await listNoteVersionsWithApiKey({ apiKey: apiKey as string, noteId: id, limit });
+      : await listNoteVersionsWithApiKey({
+          apiKey: apiKeyAuth?.apiKey as string,
+          noteId: id,
+          limit,
+        });
     return NextResponse.json({ data });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to fetch note versions';
@@ -101,15 +106,21 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   if (!versionId) return NextResponse.json({ error: 'Invalid version id' }, { status: 400 });
 
   const token = await requireConvexToken();
-  const apiKey = token ? null : readBridgeApiKeyFromRequest(request);
-  if (!token && !apiKey) {
+  const apiKeyAuth = token ? null : await readBridgeApiKeyAuthFromRequest(request);
+  if (!token && !apiKeyAuth) {
     return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
   }
+  const cookieBlocked = rejectCookieBackedCrossOriginMutation(request, apiKeyAuth);
+  if (cookieBlocked) return cookieBlocked;
 
   try {
     const data = token
       ? await restoreNoteVersion({ token, noteId: id, versionId })
-      : await restoreNoteVersionWithApiKey({ apiKey: apiKey as string, noteId: id, versionId });
+      : await restoreNoteVersionWithApiKey({
+          apiKey: apiKeyAuth?.apiKey as string,
+          noteId: id,
+          versionId,
+        });
     return NextResponse.json({ data });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to restore note version';

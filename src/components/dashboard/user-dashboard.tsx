@@ -319,7 +319,7 @@ function MobileSidebarTrigger() {
   );
 }
 
-export function UserDashboard() {
+export function UserDashboard({ apiKeySession = false }: { apiKeySession?: boolean }) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -786,7 +786,7 @@ export function UserDashboard() {
           syncProfile().catch(() => undefined),
           refreshData(),
           refreshQuickLinks(),
-          refreshPins(),
+          refreshPins().catch(() => undefined),
           refreshAnalytics().catch(() => undefined),
           refreshNotifications().catch(() => undefined),
           refreshInviteSummaries().catch(() => undefined),
@@ -807,9 +807,9 @@ export function UserDashboard() {
   useEffect(() => {
     if (panel === 'settings') {
       void Promise.all([
-        refreshApiKeys(),
+        refreshApiKeys().catch(() => undefined),
         refreshQuickLinks(),
-        refreshAnalytics(),
+        refreshAnalytics().catch(() => undefined),
         refreshNotifications(),
         refreshInviteSummaries(),
       ]).catch(() => {
@@ -819,14 +819,18 @@ export function UserDashboard() {
     }
 
     if (panel === 'notes') {
-      void Promise.all([refreshAnalytics(), refreshInviteSummaries()]).catch(() => {
+      void Promise.all([refreshAnalytics().catch(() => undefined), refreshInviteSummaries()]).catch(() => {
         toast.error('Failed to load note views');
       });
       return;
     }
 
     if (panel === 'links') {
-      void Promise.all([refreshQuickLinks(), refreshPins(), refreshInviteSummaries()]).catch(() => {
+      void Promise.all([
+        refreshQuickLinks(),
+        refreshPins().catch(() => undefined),
+        refreshInviteSummaries(),
+      ]).catch(() => {
         toast.error('Failed to load links');
       });
       return;
@@ -2067,6 +2071,11 @@ export function UserDashboard() {
             {!isInitializing && panel === 'settings' ? (
               <div className="space-y-4">
                 <h1 className="text-sm text-neutral-200">Settings</h1>
+                {apiKeySession ? (
+                  <p className="text-xs text-neutral-500">
+                    API-key sessions can edit content. Sign in with Clerk to manage API keys.
+                  </p>
+                ) : null}
 
                 <div className="rounded-sm border border-neutral-800 p-3">
                   <p className="text-xs text-neutral-500">CLI install command</p>
@@ -2121,6 +2130,7 @@ export function UserDashboard() {
                     <Button
                       type="button"
                       className="h-8 text-xs"
+                      disabled={apiKeySession}
                       onClick={() => {
                         void generateApiKey().catch((err) =>
                           toast.error(err instanceof Error ? err.message : 'Failed to generate key')
@@ -2165,6 +2175,7 @@ export function UserDashboard() {
                           type="button"
                           variant="ghost"
                           className="h-8 border border-neutral-800 text-xs"
+                          disabled={apiKeySession}
                           onClick={() => {
                             void revokeKey(key.id).catch((err) =>
                               toast.error(

@@ -1,6 +1,7 @@
 import type { CSSProperties } from 'react';
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
+import { headers } from 'next/headers';
 import { auth, currentUser } from '@clerk/nextjs/server';
 import { NoteAiOverlay } from '@/components/ai/note-ai-overlay';
 import { MarkdownContent } from '@/components/markdown';
@@ -14,6 +15,7 @@ import {
   trackNotePageView,
   trackQuickLinkClick,
 } from '@/lib/notes';
+import { getBridgeApiKeySessionFromRequest } from '@/lib/request-security';
 import {
   isPublicResourcePath,
   isPublicUsernamePath,
@@ -65,14 +67,24 @@ export default async function NotePage({
   const { getToken } = await auth();
   const token = (await getToken({ template: 'convex' })) ?? (await getToken()) ?? null;
   const user = await currentUser();
+  const cookieHeader = (await headers()).get('cookie') ?? '';
+  const apiKeySession = await getBridgeApiKeySessionFromRequest(
+    new Request('http://bri.local', { headers: { cookie: cookieHeader } })
+  );
   const isAdmin = isAdminUser(user);
-  const canEdit = resolveUserHandleFromUser(user) === username || isAdmin;
+  const canEdit =
+    resolveUserHandleFromUser(user) === username || apiKeySession?.username === username || isAdmin;
   const adminSecret = process.env.BRIDGE_ADMIN_SECRET?.trim() || '';
 
   const note =
     isAdmin && token && adminSecret
       ? await getAdminNoteByUsernameAndSlug({ username, slug, token, adminSecret })
-      : await getNoteByUsernameAndSlug({ username, slug, token });
+      : await getNoteByUsernameAndSlug({
+          username,
+          slug,
+          token,
+          apiKey: apiKeySession?.apiKey ?? null,
+        });
 
   if (!note) {
     const quickLink = await getQuickLinkByUsernameAndKey({ username, key: slug });

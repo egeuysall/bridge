@@ -9,7 +9,11 @@ import {
   listNotesWithApiKey,
   type NoteVisibility,
 } from '@/lib/notes';
-import { readBridgeApiKeyFromRequest, rejectCrossOriginMutation } from '@/lib/request-security';
+import {
+  readBridgeApiKeyAuthFromRequest,
+  rejectCookieBackedCrossOriginMutation,
+  rejectCrossOriginMutation,
+} from '@/lib/request-security';
 import { normalizeMarkdownTables } from '@/lib/tiptap-markdown';
 import { resolveUserHandleFromUser } from '@/lib/user-handle';
 
@@ -63,16 +67,16 @@ export async function GET(request: Request) {
     }
   }
 
-  const apiKey = readBridgeApiKeyFromRequest(request);
-  if (!apiKey) {
+  const apiKeyAuth = await readBridgeApiKeyAuthFromRequest(request);
+  if (!apiKeyAuth) {
     return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
   }
 
   try {
     if (state === 'active') {
-      await expireDueNotesWithApiKey({ apiKey }).catch(() => undefined);
+      await expireDueNotesWithApiKey({ apiKey: apiKeyAuth.apiKey }).catch(() => undefined);
     }
-    const notes = await listNotesWithApiKey({ state, apiKey });
+    const notes = await listNotesWithApiKey({ state, apiKey: apiKeyAuth.apiKey });
     return NextResponse.json({ data: notes });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to fetch notes';
@@ -153,14 +157,16 @@ export async function POST(request: Request) {
     }
   }
 
-  const apiKey = readBridgeApiKeyFromRequest(request);
-  if (!apiKey) {
+  const apiKeyAuth = await readBridgeApiKeyAuthFromRequest(request);
+  if (!apiKeyAuth) {
     return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
   }
+  const blocked = rejectCookieBackedCrossOriginMutation(request, apiKeyAuth);
+  if (blocked) return blocked;
 
   try {
     const result = await createNoteWithApiKey({
-      apiKey,
+      apiKey: apiKeyAuth.apiKey,
       title,
       content,
       visibility,
