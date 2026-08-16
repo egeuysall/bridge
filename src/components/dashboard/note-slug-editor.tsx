@@ -320,7 +320,7 @@ export function NoteSlugEditor({ note, isAdmin = false }: NoteSlugEditorProps) {
       >
         <DialogContent
           className="border border-neutral-800 bg-neutral-950 text-neutral-100 sm:max-w-md"
-          showCloseButton={!isRestoring}
+          showCloseButton={false}
         >
           <DialogHeader>
             <DialogTitle>Restore version {selectedVersion?.version}?</DialogTitle>
