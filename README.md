@@ -25,6 +25,15 @@ bun dev
 
 ## CLI
 
+Homebrew (recommended):
+
+```bash
+brew tap egeuysall/tap
+brew install --formula egeuysall/tap/bri
+```
+
+The source installer remains available for machines without Homebrew:
+
 ```bash
 curl -fsSL https://bri.fyi/install.sh | bash
 ```
