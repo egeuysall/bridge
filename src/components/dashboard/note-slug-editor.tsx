@@ -3,6 +3,14 @@
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { BriTiptapEditor } from '@/components/dashboard/tiptap-note-editor';
 import type { NoteRecord, NoteVisibility } from '@/lib/notes';
 import { normalizeMarkdownTables } from '@/lib/tiptap-markdown';
@@ -45,6 +53,7 @@ export function NoteSlugEditor({ note, isAdmin = false }: NoteSlugEditorProps) {
   const [selectedVersion, setSelectedVersion] = useState<NoteVersion | null>(null);
   const [isLoadingHistory, setIsLoadingHistory] = useState(true);
   const [isRestoring, setIsRestoring] = useState(false);
+  const [isRestoreDialogOpen, setIsRestoreDialogOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const historyEndpoint = isAdmin
     ? `/api/admin/notes/${encodeURIComponent(note.id)}/versions`
@@ -137,16 +146,13 @@ export function NoteSlugEditor({ note, isAdmin = false }: NoteSlugEditorProps) {
     }
   };
 
+  const openRestoreDialog = () => {
+    if (!selectedVersion || isRestoring) return;
+    setIsRestoreDialogOpen(true);
+  };
+
   const restoreVersion = async () => {
     if (!selectedVersion || isRestoring) return;
-    if (
-      !window.confirm(
-        `Restore version ${selectedVersion.version}? The current note will remain in history.`
-      )
-    ) {
-      return;
-    }
-
     setIsRestoring(true);
     setError(null);
     try {
@@ -160,6 +166,7 @@ export function NoteSlugEditor({ note, isAdmin = false }: NoteSlugEditorProps) {
         error?: string;
       };
       if (!response.ok) throw new Error(json.error || 'Failed to restore version');
+      setIsRestoreDialogOpen(false);
       router.replace(`/${note.username}/${json.data?.slug ?? note.slug}`);
       router.refresh();
     } catch (err) {
@@ -258,7 +265,7 @@ export function NoteSlugEditor({ note, isAdmin = false }: NoteSlugEditorProps) {
                 variant="outline"
                 className="h-8 text-xs"
                 disabled={isRestoring}
-                onClick={() => void restoreVersion()}
+                onClick={openRestoreDialog}
               >
                 {isRestoring ? 'restoring' : 'restore'}
               </Button>
@@ -304,6 +311,43 @@ export function NoteSlugEditor({ note, isAdmin = false }: NoteSlugEditorProps) {
           ) : null}
         </aside>
       </article>
+
+      <Dialog
+        open={isRestoreDialogOpen}
+        onOpenChange={(open) => {
+          if (!isRestoring) setIsRestoreDialogOpen(open);
+        }}
+      >
+        <DialogContent
+          className="border border-neutral-800 bg-neutral-950 text-neutral-100 sm:max-w-md"
+          showCloseButton={!isRestoring}
+        >
+          <DialogHeader>
+            <DialogTitle>Restore version {selectedVersion?.version}?</DialogTitle>
+            <DialogDescription className="text-neutral-400">
+              The current note will remain in version history.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="border-neutral-800 bg-neutral-900/50">
+            <Button
+              type="button"
+              variant="outline"
+              disabled={isRestoring}
+              onClick={() => setIsRestoreDialogOpen(false)}
+            >
+              cancel
+            </Button>
+            <Button
+              type="button"
+              className="border-neutral-100 bg-neutral-100 text-neutral-950 hover:border-white hover:bg-white hover:text-neutral-950"
+              disabled={isRestoring}
+              onClick={() => void restoreVersion()}
+            >
+              {isRestoring ? 'restoring' : 'restore version'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </section>
   );
 }
