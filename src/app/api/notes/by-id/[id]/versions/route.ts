@@ -9,11 +9,13 @@ import {
   restoreNoteVersionWithApiKey,
 } from '@/lib/notes';
 import {
+  type BridgeApiKeyAuth,
   normalizeResourceId,
   hasBridgeApiKeyAuthorization,
   readBridgeApiKeyAuthFromRequest,
   rejectCookieBackedCrossOriginMutation,
   rejectCrossOriginMutation,
+  verifyBridgeApiKey,
 } from '@/lib/request-security';
 
 async function requireConvexToken() {
@@ -42,6 +44,20 @@ function errorResponse(message: string, fallback: string) {
   return NextResponse.json({ error: fallback }, { status: 500 });
 }
 
+async function rejectInvalidBearerApiKey(
+  apiKeyAuth: BridgeApiKeyAuth | null
+): Promise<NextResponse | null> {
+  if (apiKeyAuth?.source !== 'bearer') return null;
+
+  try {
+    if (await verifyBridgeApiKey(apiKeyAuth.apiKey)) return null;
+  } catch {
+    return NextResponse.json({ error: 'API key verification unavailable' }, { status: 503 });
+  }
+
+  return NextResponse.json({ error: 'Invalid API key' }, { status: 401 });
+}
+
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id: rawId } = await params;
   const id = normalizeResourceId(rawId);
@@ -51,6 +67,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   if (!apiKeyAuth && hasBridgeApiKeyAuthorization(request)) {
     return NextResponse.json({ error: 'Invalid API key' }, { status: 401 });
   }
+  const invalidApiKey = await rejectInvalidBearerApiKey(apiKeyAuth);
+  if (invalidApiKey) return invalidApiKey;
   const token = apiKeyAuth ? null : await requireConvexToken();
   if (!token && !apiKeyAuth) {
     return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
@@ -119,6 +137,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   if (!apiKeyAuth && hasBridgeApiKeyAuthorization(request)) {
     return NextResponse.json({ error: 'Invalid API key' }, { status: 401 });
   }
+  const invalidApiKey = await rejectInvalidBearerApiKey(apiKeyAuth);
+  if (invalidApiKey) return invalidApiKey;
   const token = apiKeyAuth ? null : await requireConvexToken();
   if (!token && !apiKeyAuth) {
     return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
