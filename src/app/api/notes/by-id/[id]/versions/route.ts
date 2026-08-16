@@ -29,11 +29,17 @@ function clampLimit(raw: string | null): number {
   return Math.max(1, Math.min(100, Math.floor(parsed)));
 }
 
-function statusFromError(message: string) {
-  if (message === 'Not authenticated' || message === 'Invalid API key') return 401;
-  if (message.includes('permission') || message === 'Forbidden') return 403;
-  if (message === 'Note not found' || message === 'Version not found') return 404;
-  return 500;
+function errorResponse(message: string, fallback: string) {
+  if (message.includes('Not authenticated') || message.includes('Invalid API key')) {
+    return NextResponse.json({ error: 'Invalid API key' }, { status: 401 });
+  }
+  if (message.includes('permission') || message.includes('Forbidden')) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  }
+  if (message.includes('Note not found') || message.includes('Version not found')) {
+    return NextResponse.json({ error: 'Version not found' }, { status: 404 });
+  }
+  return NextResponse.json({ error: fallback }, { status: 500 });
 }
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -81,7 +87,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     return NextResponse.json({ data });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to fetch note versions';
-    return NextResponse.json({ error: message }, { status: statusFromError(message) });
+    return errorResponse(message, 'Failed to fetch note versions');
   }
 }
 
@@ -131,6 +137,6 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     return NextResponse.json({ data });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to restore note version';
-    return NextResponse.json({ error: message }, { status: statusFromError(message) });
+    return errorResponse(message, 'Failed to restore note version');
   }
 }

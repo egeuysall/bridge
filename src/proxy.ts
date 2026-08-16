@@ -3,10 +3,18 @@ import { NextResponse } from 'next/server';
 import { isMarkdownAlias, stripMarkdownAlias } from '@/lib/post-slugs';
 import { resolveUserHandle } from '@/lib/user-handle';
 
+function hasBridgeApiKeyAuthorization(request: Request): boolean {
+  const authHeader = request.headers.get('authorization') || request.headers.get('Authorization');
+  return /^Bearer\s+bri_/i.test(authHeader?.trim() ?? '');
+}
+
 export default clerkMiddleware(async (auth, request) => {
   const { pathname } = request.nextUrl;
-  const { sessionClaims } = await auth();
-  const userHandle = resolveUserHandle(sessionClaims as Record<string, unknown> | null | undefined);
+  const userHandle = hasBridgeApiKeyAuthorization(request)
+    ? null
+    : resolveUserHandle(
+        ((await auth()).sessionClaims as Record<string, unknown> | null | undefined)
+      );
 
   if (pathname === '/' && userHandle) {
     const redirectUrl = request.nextUrl.clone();
