@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'bun:test';
 
 import {
+  hasBridgeApiKeyAuthorization,
   readBridgeApiKeyFromRequest,
   rejectCookieBackedCrossOriginMutation,
   type BridgeApiKeyAuth,
@@ -27,6 +28,23 @@ describe('browser API-key request security', () => {
         }),
       ),
     ).toBeNull();
+  });
+
+  it('recognizes Bri bearer requests before Clerk auth runs', () => {
+    expect(
+      hasBridgeApiKeyAuthorization(
+        new Request('https://bri.test/api/notes', {
+          headers: { authorization: 'Bearer bri_test.secret' },
+        }),
+      ),
+    ).toBe(true);
+    expect(
+      hasBridgeApiKeyAuthorization(
+        new Request('https://bri.test/api/notes', {
+          headers: { authorization: 'Bearer eyJ.not-a-bri-key' },
+        }),
+      ),
+    ).toBe(false);
   });
 
   it('requires same-origin browser signals for cookie mutations', () => {

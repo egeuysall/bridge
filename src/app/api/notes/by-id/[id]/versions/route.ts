@@ -10,6 +10,7 @@ import {
 } from '@/lib/notes';
 import {
   normalizeResourceId,
+  hasBridgeApiKeyAuthorization,
   readBridgeApiKeyAuthFromRequest,
   rejectCookieBackedCrossOriginMutation,
   rejectCrossOriginMutation,
@@ -40,8 +41,11 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   const id = normalizeResourceId(rawId);
   if (!id) return NextResponse.json({ error: 'Invalid note id' }, { status: 400 });
 
-  const token = await requireConvexToken();
-  const apiKeyAuth = token ? null : await readBridgeApiKeyAuthFromRequest(request);
+  const apiKeyAuth = await readBridgeApiKeyAuthFromRequest(request);
+  if (!apiKeyAuth && hasBridgeApiKeyAuthorization(request)) {
+    return NextResponse.json({ error: 'Invalid API key' }, { status: 401 });
+  }
+  const token = apiKeyAuth ? null : await requireConvexToken();
   if (!token && !apiKeyAuth) {
     return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
   }
@@ -105,8 +109,11 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   const versionId = normalizeResourceId(payload.versionId);
   if (!versionId) return NextResponse.json({ error: 'Invalid version id' }, { status: 400 });
 
-  const token = await requireConvexToken();
-  const apiKeyAuth = token ? null : await readBridgeApiKeyAuthFromRequest(request);
+  const apiKeyAuth = await readBridgeApiKeyAuthFromRequest(request);
+  if (!apiKeyAuth && hasBridgeApiKeyAuthorization(request)) {
+    return NextResponse.json({ error: 'Invalid API key' }, { status: 401 });
+  }
+  const token = apiKeyAuth ? null : await requireConvexToken();
   if (!token && !apiKeyAuth) {
     return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
   }

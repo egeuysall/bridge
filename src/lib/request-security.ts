@@ -38,6 +38,11 @@ export function readBridgeApiKeyFromRequest(request: Request): string | null {
   return normalized;
 }
 
+export function hasBridgeApiKeyAuthorization(request: Request): boolean {
+  const authHeader = request.headers.get('authorization') || request.headers.get('Authorization');
+  return /^Bearer\s+bri_/i.test(authHeader?.trim() ?? '');
+}
+
 export function getBridgeApiKeySessionCookieName(): string {
   return SESSION_COOKIE_NAME;
 }
