@@ -241,6 +241,7 @@ export function NoteSlugEditor({ note, isAdmin = false }: NoteSlugEditorProps) {
         </div>
 
         <aside
+          id="version-history"
           className="min-w-0 rounded-sm border border-neutral-800 p-3"
           aria-label="Version history"
         >

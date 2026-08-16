@@ -118,12 +118,20 @@ export default async function NotePage({
             <div className="flex shrink-0 items-center gap-2" data-note-export-actions>
               <ExportPdfButton title={note.title} />
               {canEdit ? (
-                <Link
-                  href={`/${note.username}/${note.slug}/edit`}
-                  className="shrink-0 rounded-sm border border-neutral-700 bg-neutral-950 px-3 py-1.5 text-xs font-medium text-neutral-100 transition-colors hover:bg-neutral-900"
-                >
-                  edit page
-                </Link>
+                <>
+                  <Link
+                    href={`/${note.username}/${note.slug}/edit#version-history`}
+                    className="shrink-0 rounded-sm border border-neutral-700 bg-neutral-950 px-3 py-1.5 text-xs font-medium text-neutral-100 transition-colors hover:bg-neutral-900"
+                  >
+                    version history
+                  </Link>
+                  <Link
+                    href={`/${note.username}/${note.slug}/edit`}
+                    className="shrink-0 rounded-sm border border-neutral-700 bg-neutral-950 px-3 py-1.5 text-xs font-medium text-neutral-100 transition-colors hover:bg-neutral-900"
+                  >
+                    edit page
+                  </Link>
+                </>
               ) : null}
             </div>
           </div>

@@ -39,6 +39,21 @@ bri notes version <note-id> <version-id>
 bri notes restore-version <note-id> <version-id>
 ```
 
+The version-history API uses the same API key permissions:
+
+```bash
+curl -H "Authorization: Bearer $BRI_API_KEY" \
+  "https://bri.fyi/api/notes/by-id/<note-id>/versions"
+curl -H "Authorization: Bearer $BRI_API_KEY" \
+  "https://bri.fyi/api/notes/by-id/<note-id>/versions?versionId=<version-id>"
+curl -X PATCH -H "Authorization: Bearer $BRI_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"action":"restore","versionId":"<version-id>"}' \
+  "https://bri.fyi/api/notes/by-id/<note-id>/versions"
+```
+
+Listing and reading require read permission; restoring requires write permission.
+
 ## MCP server
 
 The stdio MCP server can list, read, publish, inspect versions, and restore Bri notes using the same scoped API keys as the CLI:
