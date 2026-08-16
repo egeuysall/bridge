@@ -4,8 +4,7 @@ import process from 'node:process';
 import Pastel from 'pastel';
 import { renderTopHelp, VERSION, normalizeArgv } from './core/shared';
 
-async function main(): Promise<void> {
-  const argv = process.argv.slice(2);
+export async function main(argv = process.argv.slice(2), commandMeta: ImportMeta = import.meta): Promise<void> {
   if (argv[0] === 'mcp') {
     if (argv.some((arg) => arg === '-h' || arg === '--help' || arg === 'help')) {
       console.log('bri mcp');
@@ -49,7 +48,7 @@ async function main(): Promise<void> {
   }
 
   const app = new Pastel({
-    importMeta: import.meta,
+    importMeta: commandMeta,
     name: 'bri',
     version: VERSION,
     description: 'bri CLI: publish markdown to bri',
@@ -58,8 +57,10 @@ async function main(): Promise<void> {
   await app.run(normalizeArgv(process.argv));
 }
 
-main().catch((error: unknown) => {
-  const message = error instanceof Error ? error.message : String(error);
-  console.error(message);
-  process.exit(1);
-});
+if (import.meta.main) {
+  main().catch((error: unknown) => {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(message);
+    process.exit(1);
+  });
+}

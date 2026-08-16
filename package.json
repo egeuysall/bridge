@@ -79,6 +79,7 @@
     "@types/react": "^19.2.17",
     "eslint": "^10.5.0",
     "eslint-config-next": "16.2.9",
+    "react-devtools-core": "^7.0.1",
     "typescript": "^6.0.3"
   },
   "trustedDependencies": [

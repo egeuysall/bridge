@@ -242,6 +242,12 @@ export async function runSelfUpdate(options: SelfUpdateOptions, command: Command
     return;
   }
 
+  if (result.managedByHomebrew) {
+    printer.ok('updated with Homebrew');
+    printer.info('ran brew update && brew upgrade bri');
+    return;
+  }
+
   if (result.status === 'up-to-date') {
     printer.ok(`already up to date (${result.currentVersion})`);
     return;

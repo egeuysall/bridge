@@ -6,7 +6,7 @@ const cliManifestPath = 'cli/version.json';
 const publicManifestPath = 'public/bri-version.json';
 
 const cliManifest = JSON.parse(readFileSync(cliManifestPath, 'utf8'));
-const version = String(cliManifest.version ?? '').trim();
+const version = String(process.argv[2] ?? cliManifest.version ?? '').trim();
 
 if (!/^\d+\.\d+\.\d+$/.test(version)) {
   throw new Error(`Invalid CLI version: ${version || '<empty>'}`);
