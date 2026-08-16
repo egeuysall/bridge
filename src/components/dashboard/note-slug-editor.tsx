@@ -43,10 +43,12 @@ export function NoteSlugEditor({ note, isAdmin = false }: NoteSlugEditorProps) {
   const [isSaving, setIsSaving] = useState(false);
   const [versions, setVersions] = useState<NoteVersion[]>([]);
   const [selectedVersion, setSelectedVersion] = useState<NoteVersion | null>(null);
-  const [isLoadingHistory, setIsLoadingHistory] = useState(isAdmin);
+  const [isLoadingHistory, setIsLoadingHistory] = useState(true);
   const [isRestoring, setIsRestoring] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const historyEndpoint = `/api/admin/notes/${encodeURIComponent(note.id)}/versions`;
+  const historyEndpoint = isAdmin
+    ? `/api/admin/notes/${encodeURIComponent(note.id)}/versions`
+    : `/api/notes/by-id/${encodeURIComponent(note.id)}/versions`;
 
   const loadVersion = useCallback(
     async (versionId: string) => {
@@ -71,8 +73,6 @@ export function NoteSlugEditor({ note, isAdmin = false }: NoteSlugEditorProps) {
   );
 
   useEffect(() => {
-    if (!isAdmin) return;
-
     let active = true;
     void (async () => {
       try {
@@ -96,7 +96,7 @@ export function NoteSlugEditor({ note, isAdmin = false }: NoteSlugEditorProps) {
     return () => {
       active = false;
     };
-  }, [historyEndpoint, isAdmin, loadVersion]);
+  }, [historyEndpoint, loadVersion]);
 
   const save = async () => {
     const nextTitle = title.trim();
@@ -172,7 +172,7 @@ export function NoteSlugEditor({ note, isAdmin = false }: NoteSlugEditorProps) {
   return (
     <section className="w-full px-4 py-5 md:px-8 md:py-8">
       <article
-        className={`mx-auto grid w-full gap-6 ${isAdmin ? 'max-w-7xl lg:grid-cols-[minmax(0,1fr)_22rem]' : 'max-w-4xl'}`}
+        className="mx-auto grid w-full max-w-7xl gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]"
       >
         <div className="flex min-w-0 flex-col gap-4">
           <div className="flex items-center justify-between gap-3">
@@ -240,68 +240,68 @@ export function NoteSlugEditor({ note, isAdmin = false }: NoteSlugEditorProps) {
           />
         </div>
 
-        {isAdmin ? (
-          <aside
-            className="min-w-0 rounded-sm border border-neutral-800 p-3"
-            aria-label="Version history"
-          >
-            <div className="mb-3 flex items-center justify-between gap-2">
-              <div>
-                <p className="text-xs font-medium text-neutral-100">version history</p>
-                <p className="mt-1 text-[11px] text-neutral-500">admin only · newest first</p>
-              </div>
-              {selectedVersion ? (
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="h-8 text-xs"
-                  disabled={isRestoring}
-                  onClick={() => void restoreVersion()}
-                >
-                  {isRestoring ? 'restoring' : 'restore'}
-                </Button>
-              ) : null}
+        <aside
+          className="min-w-0 rounded-sm border border-neutral-800 p-3"
+          aria-label="Version history"
+        >
+          <div className="mb-3 flex items-center justify-between gap-2">
+            <div>
+              <p className="text-xs font-medium text-neutral-100">version history</p>
+              <p className="mt-1 text-[11px] text-neutral-500">
+                {isAdmin ? 'admin history' : 'saved versions'} · newest first
+              </p>
             </div>
-
-            {isLoadingHistory ? <p className="text-xs text-neutral-500">loading history…</p> : null}
-            {!isLoadingHistory && versions.length === 0 ? (
-              <p className="text-xs text-neutral-500">No past versions yet.</p>
+            {selectedVersion ? (
+              <Button
+                type="button"
+                variant="outline"
+                className="h-8 text-xs"
+                disabled={isRestoring}
+                onClick={() => void restoreVersion()}
+              >
+                {isRestoring ? 'restoring' : 'restore'}
+              </Button>
             ) : null}
+          </div>
 
-            <div className="flex max-h-56 flex-col gap-1 overflow-y-auto">
-              {versions.map((version) => (
-                <button
-                  key={version.id}
-                  type="button"
-                  className={`rounded-sm border px-2 py-2 text-left text-xs transition-colors ${
-                    selectedVersion?.id === version.id
-                      ? 'border-neutral-500 bg-neutral-900 text-neutral-100'
-                      : 'border-neutral-800 text-neutral-400 hover:border-neutral-700 hover:text-neutral-200'
-                  }`}
-                  onClick={() => void loadVersion(version.id)}
-                >
-                  <span className="block font-medium">
-                    v{version.version} · {version.title}
-                  </span>
-                  <span className="mt-1 block text-[10px] text-neutral-500">
-                    {formatVersionDate(version.createdAt)} · {version.actor}
-                  </span>
-                </button>
-              ))}
+          {isLoadingHistory ? <p className="text-xs text-neutral-500">loading history…</p> : null}
+          {!isLoadingHistory && versions.length === 0 ? (
+            <p className="text-xs text-neutral-500">No past versions yet.</p>
+          ) : null}
+
+          <div className="flex max-h-56 flex-col gap-1 overflow-y-auto">
+            {versions.map((version) => (
+              <button
+                key={version.id}
+                type="button"
+                className={`rounded-sm border px-2 py-2 text-left text-xs transition-colors ${
+                  selectedVersion?.id === version.id
+                    ? 'border-neutral-500 bg-neutral-900 text-neutral-100'
+                    : 'border-neutral-800 text-neutral-400 hover:border-neutral-700 hover:text-neutral-200'
+                }`}
+                onClick={() => void loadVersion(version.id)}
+              >
+                <span className="block font-medium">
+                  v{version.version} · {version.title}
+                </span>
+                <span className="mt-1 block text-[10px] text-neutral-500">
+                  {formatVersionDate(version.createdAt)} · {version.actor}
+                </span>
+              </button>
+            ))}
+          </div>
+
+          {selectedVersion?.content !== undefined ? (
+            <div className="mt-3 border-t border-neutral-800 pt-3">
+              <p className="mb-2 text-[11px] text-neutral-500">
+                {selectedVersion.visibility} · /{selectedVersion.slug}
+              </p>
+              <pre className="max-h-[40vh] overflow-auto whitespace-pre-wrap break-words rounded-sm bg-neutral-950 p-2 text-[11px] leading-5 text-neutral-300">
+                {selectedVersion.content}
+              </pre>
             </div>
-
-            {selectedVersion?.content !== undefined ? (
-              <div className="mt-3 border-t border-neutral-800 pt-3">
-                <p className="mb-2 text-[11px] text-neutral-500">
-                  {selectedVersion.visibility} · /{selectedVersion.slug}
-                </p>
-                <pre className="max-h-[40vh] overflow-auto whitespace-pre-wrap break-words rounded-sm bg-neutral-950 p-2 text-[11px] leading-5 text-neutral-300">
-                  {selectedVersion.content}
-                </pre>
-              </div>
-            ) : null}
-          </aside>
-        ) : null}
+          ) : null}
+        </aside>
       </article>
     </section>
   );
