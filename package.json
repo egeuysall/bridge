@@ -16,7 +16,10 @@
     "start": "next start",
     "test:e2e": "playwright test",
     "cli": "NODE_ENV=development bun run ./cli/bri.ts",
-    "cli:version:sync": "node scripts/sync-cli-version.mjs"
+    "cli:version:sync": "node scripts/sync-cli-version.mjs",
+    "docs:dev": "bun run --cwd bri-docs dev",
+    "docs:build": "bun run --cwd bri-docs build",
+    "docs:deploy": "vercel --cwd bri-docs --prod"
   },
   "dependencies": {
     "@ai-sdk/gateway": "^4.0.2",

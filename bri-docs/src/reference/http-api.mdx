@@ -1,0 +1,98 @@
+---
+"$schema": https://holocron.so/frontmatter.json
+title: Use the Bri HTTP API for Markdown notes
+sidebarTitle: HTTP API
+description: Use Bri’s authenticated JSON API to publish, list, update, read, and restore Markdown notes from scripts and services.
+icon: lucide:braces
+---
+
+# Use the Bri HTTP API for Markdown notes
+
+The **HTTP API** is JSON over HTTPS at `https://bri.fyi`. The generated [API Reference](../api.yaml) tab contains the machine-readable OpenAPI operations; this page shows the flows people use most often.
+
+## List notes
+
+```bash
+curl \
+  -H "Authorization: Bearer $BRI_API_KEY" \
+  'https://bri.fyi/api/notes?state=active'
+```
+
+Responses use a **`data` envelope**:
+
+```json
+{
+  "data": [
+    {
+      "id": "note-id",
+      "username": "your-username",
+      "slug": "hello-from-bri",
+      "title": "Hello from Bri",
+      "visibility": "public",
+      "state": "active"
+    }
+  ]
+}
+```
+
+Use `state=deleted` to list soft-deleted notes. Both list states require read permission.
+
+## Publish a note
+
+```bash
+curl -X POST \
+  -H "Authorization: Bearer $BRI_API_KEY" \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "title": "Hello from the API",
+    "content": "# Hello\n\nPublished with curl.",
+    "visibility": "public",
+    "expiresInDays": 30
+  }' \
+  https://bri.fyi/api/notes
+```
+
+Publishing **creates a new note** and derives a unique slug. `title` and non-empty `content` are required; `visibility` is `public` or `private`; `expiresInDays` is capped at 30 or can be `null`.
+
+## Read a note
+
+Use the public JSON route for **structured content**:
+
+```bash
+curl \
+  -H "Authorization: Bearer $BRI_API_KEY" \
+  https://bri.fyi/api/public/notes/<username>/<slug>
+```
+
+The key is optional for a public note and required when the note is private or otherwise protected. The human-facing Markdown route is `https://bri.fyi/<username>/<slug>.md`.
+
+## Update and restore
+
+Update a note by stable ID:
+
+```bash
+curl -X PATCH \
+  -H "Authorization: Bearer $BRI_API_KEY" \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "title": "Updated title",
+    "content": "# Updated\n\nNew content.",
+    "visibility": "private",
+    "expiresInDays": null
+  }' \
+  https://bri.fyi/api/notes/by-id/<note-id>
+```
+
+Every successful update writes a **version snapshot**. List or read those snapshots at:
+
+```text
+GET   /api/notes/by-id/<note-id>/versions
+GET   /api/notes/by-id/<note-id>/versions?versionId=<version-id>
+PATCH /api/notes/by-id/<note-id>/versions
+```
+
+The PATCH body for restore is `{"action":"restore","versionId":"<version-id>"}`. Updates and restores require write permission; version reads require read permission.
+
+## Errors and limits
+
+An error response is a **small JSON object** such as `{"error":"Invalid API key"}`. Validate the status code before reading `data`, and retry only transient `5xx` failures. The CLI defaults to a 10-second timeout and two retries for publishing.

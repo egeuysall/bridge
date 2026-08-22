@@ -1,0 +1,50 @@
+---
+"$schema": https://holocron.so/frontmatter.json
+title: Authenticate Bri API and CLI requests
+sidebarTitle: Authentication
+description: Authenticate Bri requests with bearer API keys, choose read or write scopes, and handle the permission errors returned by the API.
+icon: lucide:shield-check
+---
+
+# Authenticate Bri API and CLI requests
+
+Bri uses **bearer API keys** for programmatic access. Keys begin with `bri_`, are verified server-side, and are never returned again after creation.
+
+## Send a bearer key
+
+Add the key to the `Authorization` header:
+
+```bash
+curl \
+  -H "Authorization: Bearer $BRI_API_KEY" \
+  https://bri.fyi/api/notes
+```
+
+The CLI uses the same header. `BRI_API_KEY` is the preferred environment variable; `bri login --api-key` stores an equivalent local config value for interactive use.
+
+## Choose the smallest scope
+
+- **`read`** permits listing notes, reading accessible notes, and reading version history.
+- **`write`** permits publishing, updating, deleting, inviting, and restoring, but does not grant read/list access by itself.
+- **`read_write`** combines both sets and is required for API-key browser sessions and full MCP workflows.
+
+The server checks the **required permission at every operation**. A key that only has one half of the required access fails with `403`; do not assume a write key can read data.
+
+## API-key browser sessions
+
+The sign-in page can create a short-lived **encrypted web session** from a `read_write` key. Use this only for a human session; long-running clients should keep using bearer headers.
+
+<Warning>
+**Do not put API keys in URLs.** Query strings, browser history, referrer headers, and access logs can retain them. Use an `Authorization` header or a local environment variable.
+</Warning>
+
+## Common responses
+
+- **`400`** means the request body, ID, title, content, or parameter is invalid.
+- **`401`** means the key is missing, malformed, revoked, or not valid.
+- **`403`** means the key is valid but lacks the required permission or ownership.
+- **`404`** means the note or version is not available to the caller.
+- **`413`** means a request is larger than the endpoint allows.
+- **`429`** means a rate-limited AI request should be retried later.
+
+Revoke exposed keys from the dashboard’s **Settings** panel. Existing clients should fail closed after revocation.

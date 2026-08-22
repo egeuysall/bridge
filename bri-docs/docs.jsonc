@@ -1,0 +1,88 @@
+{
+  "$schema": "https://holocron.so/docs.json",
+  "name": "Bri",
+  "description": "Publish, read, and automate Markdown notes with Bri.",
+  "favicon": "/favicon.ico",
+  "colors": {
+    "primary": "#d4d4d4"
+  },
+  "icons": {
+    "library": "lucide"
+  },
+  "navbar": {
+    "links": [
+      {
+        "type": "github",
+        "href": "https://github.com/egeuysall/bri"
+      }
+    ],
+    "primary": {
+      "type": "button",
+      "label": "Open Bri",
+      "href": "https://bri.fyi"
+    }
+  },
+  "footer": {
+    "socials": {
+      "github": "https://github.com/egeuysall/bri",
+      "x": "https://x.com/egecreates"
+    }
+  },
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Getting started",
+            "icon": "lucide:rocket",
+            "pages": [
+              "index",
+              "getting-started/installation",
+              "getting-started/first-note"
+            ]
+          },
+          {
+            "group": "Guides",
+            "icon": "lucide:map",
+            "pages": [
+              "guides/cli",
+              "guides/notes",
+              "guides/mcp"
+            ]
+          },
+          {
+            "group": "Reference",
+            "icon": "lucide:book-open",
+            "pages": [
+              "reference/authentication",
+              "reference/http-api",
+              "reference/development"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "openapi": "api.yaml",
+        "base": "api"
+      }
+    ],
+    "global": {
+      "anchors": [
+        {
+          "anchor": "Bri",
+          "href": "https://bri.fyi",
+          "icon": "lucide:home",
+          "placement": "tabs"
+        },
+        {
+          "anchor": "GitHub",
+          "href": "https://github.com/egeuysall/bri",
+          "icon": "lucide:github",
+          "placement": "tabs"
+        }
+      ]
+    }
+  }
+}

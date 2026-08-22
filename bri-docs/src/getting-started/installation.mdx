@@ -1,0 +1,76 @@
+---
+"$schema": https://holocron.so/frontmatter.json
+title: Install the Bri CLI and create an API key
+sidebarTitle: Install & Auth
+description: Install the Bri CLI, create a scoped API key, save it locally, and verify that authenticated commands can reach Bri.
+icon: lucide:key-round
+---
+
+# Install the Bri CLI and create an API key
+
+The **Bri CLI** is the fastest path from a Markdown file to a public or private note. Homebrew is the recommended install method because it keeps upgrades owned by Homebrew.
+
+## Install `bri`
+
+<Tabs>
+  <Tab title='Homebrew'>
+
+```bash
+brew tap egeuysall/tap
+brew install --formula egeuysall/tap/bri
+```
+
+  </Tab>
+  <Tab title='Installer'>
+
+```bash
+curl -fsSL https://bri.fyi/install.sh | bash
+```
+
+The installer is useful on machines without Homebrew. Review the script or use Homebrew when your environment has stricter supply-chain requirements.
+
+  </Tab>
+</Tabs>
+
+<Aside>
+<Info>
+**Check the binary:** run `bri --version` after installation. The CLI can check for newer releases during normal commands; pass `--no-update-check` in automation.
+</Info>
+</Aside>
+
+## Create a key
+
+1. Sign in at [bri.fyi](https://bri.fyi) with your Bri account.
+2. Open your profile dashboard and switch to **Settings**.
+3. Choose a label and the smallest permission set that fits the client.
+4. Select **Generate**, then save the full key immediately; Bri shows it once.
+
+The three **permission levels** are `read`, `write`, and `read_write`. Publishing, updating, deleting, inviting, and restoring require write access; listing and reading require read access. A key used to sign in through the browser must be `read_write`.
+
+<Warning>
+**Treat the key like a password.** Do not paste it into a repository, issue, screenshot, or client-side code. Revoke it from Settings if it is exposed.
+</Warning>
+
+## Save the key for the CLI
+
+Use `bri login` to save the key in the local Bri config file:
+
+```bash
+bri login --api-key 'bri_your-key-here'
+```
+
+The config lives at **`~/.config/bri/config.json`**. For CI or a one-off command, prefer an environment variable so the key does not become part of the saved config:
+
+```bash
+export BRI_API_KEY='bri_your-key-here'
+```
+
+## Verify the connection
+
+Run the **diagnostic command** before publishing:
+
+```bash
+bri doctor
+```
+
+If the command fails, check that the key is complete, has the required permission, and is not revoked. `BRI_ENDPOINT` and `BRI_SITE_URL` can override the production defaults when you are testing a local Bri server.

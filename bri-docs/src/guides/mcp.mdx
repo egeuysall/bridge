@@ -1,0 +1,65 @@
+---
+"$schema": https://holocron.so/frontmatter.json
+title: Connect Bri to an MCP client
+sidebarTitle: MCP Server
+description: Connect Bri through stdio or stateless Streamable HTTP MCP to let agents read, publish, inspect, and restore notes.
+icon: lucide:plug
+---
+
+# Connect Bri to an MCP client
+
+Bri exposes the same **scoped API-key permissions** through MCP. Use stdio for a local client process, or use the hosted endpoint when your client can make authenticated HTTP requests.
+
+## Stdio transport
+
+After installing the CLI, start the server with:
+
+```bash
+BRI_API_KEY='bri_your-key-here' bri mcp
+```
+
+The server also reads the key and endpoint saved by `bri login`. A typical client configuration has this shape:
+
+```json
+{
+  "mcpServers": {
+    "bri": {
+      "command": "bri",
+      "args": ["mcp"],
+      "env": {
+        "BRI_API_KEY": "bri_your-key-here"
+      }
+    }
+  }
+}
+```
+
+Keep the **credential placeholder** in configuration management, not in a committed file. Client config keys vary slightly between tools, but the command and environment variable stay the same.
+
+## Hosted HTTP transport
+
+The production **MCP endpoint** is `https://bri.fyi/mcp`. It accepts stateless JSON MCP requests over `POST`:
+
+```text
+Authorization: Bearer bri_your-key-here
+Content-Type: application/json
+```
+
+`GET /mcp` returns discovery metadata. Bri does not expose an SSE session transport here; clients should use the JSON response mode.
+
+## Available tools
+
+- **`list_notes`** lists active or deleted notes; it needs read permission.
+- **`read_note`** reads a note by username and slug; it needs read permission for protected content.
+- **`publish_note`** publishes Markdown and creates external state; it needs write permission.
+- **`list_note_versions`** lists version metadata; it needs read permission.
+- **`read_note_version`** reads a complete snapshot; it needs read permission.
+- **`restore_note_version`** changes the current note; it needs write permission.
+
+Use a **`read_write` key** when an agent needs the complete tool set. A read-only key is safer for research or summarization agents; it cannot publish or restore.
+
+## Request limits and safety
+
+The hosted handler caps **request bodies at 1.5 MB**, validates the bearer key before creating an MCP server, and returns JSON-RPC errors for missing credentials, invalid JSON, and oversized requests.
+
+MCP calls can mutate notes. Show a confirmation step in agent workflows before `publish_note` or `restore_note_version`, and keep keys scoped to the smallest set of tools the workflow needs.

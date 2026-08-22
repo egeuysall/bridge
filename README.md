@@ -8,6 +8,17 @@ bri is a minimalist Next.js app for sharing Markdown instantly.
 - Bun
 - Convex
 
+## Documentation
+
+Read the public [Bri documentation](https://bri.fyi/docs). The Holocron source
+for it lives in [`bri-docs/`](bri-docs/), with root-level commands for local
+development, builds, and production deployment.
+
+```bash
+bun run docs:dev
+bun run docs:build
+```
+
 ## Local Development
 
 1. Copy the required variables into `.env.local`.

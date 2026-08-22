@@ -1,0 +1,49 @@
+---
+"$schema": https://holocron.so/frontmatter.json
+title: Publish Markdown notes with Bri
+sidebarTitle: Home
+description: Publish, read, and automate Markdown notes with Bri through a CLI, REST API, or MCP server.
+icon: lucide:home
+---
+
+# Publish Markdown notes with Bri
+
+Bri is an **open-source publishing platform** for Markdown notes, private drafts, and quick links. Use the web app when you want a dashboard, or use the CLI and API when you want repeatable workflows.
+
+<Aside>
+<Note>
+**Start here:** install the CLI, create a scoped API key in your Bri dashboard, and publish one note in under a minute.
+</Note>
+</Aside>
+
+## Choose a path
+
+<CardGroup cols={2}>
+  <Card title='Install and authenticate' icon='lucide:download' href='./getting-started/installation.mdx'>
+    Install `bri`, create a key, and verify the connection.
+  </Card>
+  <Card title='Publish your first note' icon='lucide:file-plus' href='./getting-started/first-note.mdx'>
+    Publish a Markdown file or stdin and get a shareable URL.
+  </Card>
+  <Card title='Use the CLI' icon='lucide:terminal' href='./guides/cli.mdx'>
+    Learn the commands for notes, links, config, and automation.
+  </Card>
+  <Card title='Connect an MCP client' icon='lucide:plug' href='./guides/mcp.mdx'>
+    Let an agent read, publish, and restore notes with scoped access.
+  </Card>
+</CardGroup>
+
+## The core model
+
+- **Notes** hold Markdown content with a title, slug, visibility, and optional expiration.
+- **API keys** are scoped as `read`, `write`, or `read_write` and can be revoked from the dashboard.
+- **Interfaces** share the same server-side permissions: the web app, REST API, CLI, and MCP server.
+- **Links** provide short, trackable redirects alongside your notes.
+
+## One endpoint, several clients
+
+The canonical **write endpoint** is `https://bri.fyi/api/notes`. The CLI and MCP server use it for publishing, while public readers can use a note URL or the JSON and Markdown read endpoints.
+
+<Check>
+**No vendor lock-in:** Bri stores your content as Markdown, exposes a documented HTTP API, and keeps the CLI configuration in `~/.config/bri/config.json`.
+</Check>

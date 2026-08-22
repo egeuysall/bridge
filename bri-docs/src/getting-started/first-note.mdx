@@ -1,0 +1,83 @@
+---
+"$schema": https://holocron.so/frontmatter.json
+title: Publish your first Markdown note with Bri
+sidebarTitle: First Note
+description: Publish a Markdown file or stdin with the Bri CLI, then read the resulting note through its web, JSON, or Markdown URL.
+icon: lucide:file-plus-2
+---
+
+# Publish your first Markdown note with Bri
+
+The **publish flow** accepts a Markdown file or stdin, derives a slug from the title, and returns the username and slug for the new note.
+
+## Create a Markdown file
+
+Save this as `hello-bri.md`:
+
+```markdown
+# Hello from Bri
+
+This note was published from the Bri CLI.
+```
+
+The first H1 becomes the default **note title**. You can override it with `--title` when the file does not contain an H1 or when you want a different title.
+
+## Publish it
+
+```bash
+bri publish --path ./hello-bri.md --no-copy --no-open
+```
+
+The command sends the content to `https://bri.fyi/api/notes` and prints a **shareable URL** such as `https://bri.fyi/your-username/hello-from-bri`.
+
+<Tip>
+**Automation tip:** add `--json` for machine-readable output, and keep `--no-copy --no-open` in CI so the command never depends on a clipboard or desktop browser.
+</Tip>
+
+## Publish from stdin
+
+Pipes are useful for generated release notes and scripts:
+
+```bash
+printf '# Release notes\n\nShipped from CI.\n' \
+  | bri publish --stdin --title 'Release notes' --no-copy --no-open
+```
+
+You can choose **visibility** and an expiration window at publish time:
+
+```bash
+bri publish \
+  --path ./draft.md \
+  --visibility private \
+  --expire-days 7 \
+  --no-copy \
+  --no-open
+```
+
+Expiration accepts up to **30 days**. The HTTP API also accepts `null` for a note without an expiration.
+
+## Read the note back
+
+The CLI can read the rendered **note content**:
+
+```bash
+bri notes read <username> <slug>
+```
+
+The same note is available in three useful forms:
+
+- **Web:** `https://bri.fyi/<username>/<slug>`
+- **JSON:** `https://bri.fyi/api/public/notes/<username>/<slug>`
+- **Markdown:** `https://bri.fyi/<username>/<slug>.md`
+
+Public notes can be read without a key. Private notes require an authenticated owner, collaborator, or API key with access.
+
+## Preview without publishing
+
+Use **dry run** to validate the input and preview the resolved path without creating a note:
+
+```bash
+bri publish --path ./hello-bri.md --dry-run --no-copy --no-open
+```
+
+Dry run does not reserve a slug, so another note can claim that slug before the real publish.

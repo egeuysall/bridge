@@ -1,0 +1,397 @@
+openapi: 3.0.3
+info:
+  title: Bri Notes API
+  version: 1.0.0
+  description: Publish, read, update, and restore Markdown notes on Bri.
+servers:
+  - url: https://bri.fyi
+    description: Production
+tags:
+  - name: notes
+    description: Note publishing and lifecycle operations
+  - name: public
+    description: Public and protected note reads
+security:
+  - bearerAuth: []
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: Bri API key
+      description: 'Send a key as Authorization: Bearer bri_...'
+  schemas:
+    Note:
+      type: object
+      required:
+        - id
+        - username
+        - slug
+        - title
+        - content
+        - visibility
+        - state
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+          description: Stable note identifier.
+        username:
+          type: string
+        slug:
+          type: string
+        title:
+          type: string
+        content:
+          type: string
+          description: Markdown content. Some list responses may omit content.
+        visibility:
+          type: string
+          enum: [public, private]
+        state:
+          type: string
+          enum: [active, deleted]
+        createdAt:
+          type: integer
+          format: int64
+        updatedAt:
+          type: integer
+          format: int64
+        expiresAt:
+          type: integer
+          format: int64
+          nullable: true
+    NoteVersion:
+      type: object
+      required:
+        - id
+        - noteId
+        - title
+        - content
+        - createdAt
+      properties:
+        id:
+          type: string
+        noteId:
+          type: string
+        title:
+          type: string
+        content:
+          type: string
+        createdAt:
+          type: integer
+          format: int64
+    PublishNote:
+      type: object
+      required: [title, content]
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 120
+        content:
+          type: string
+          minLength: 1
+        visibility:
+          type: string
+          enum: [public, private]
+          default: public
+        expiresInDays:
+          type: number
+          minimum: 1
+          maximum: 30
+          nullable: true
+          default: 30
+    UpdateNote:
+      allOf:
+        - $ref: '#/components/schemas/PublishNote'
+    RestoreVersion:
+      type: object
+      required: [action, versionId]
+      properties:
+        action:
+          type: string
+          enum: [restore]
+        versionId:
+          type: string
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+  responses:
+    BadRequest:
+      description: Invalid request.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Unauthorized:
+      description: Missing, malformed, revoked, or invalid API key.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Forbidden:
+      description: The key lacks the required permission or ownership.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    NotFound:
+      description: The note or version is not available.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+  parameters:
+    NoteId:
+      name: noteId
+      in: path
+      required: true
+      schema:
+        type: string
+      description: Stable Bri note identifier.
+paths:
+  /api/notes:
+    get:
+      tags: [notes]
+      summary: List notes
+      description: List the authenticated owner's active or deleted notes.
+      parameters:
+        - name: state
+          in: query
+          schema:
+            type: string
+            enum: [active, deleted]
+            default: active
+      responses:
+        '200':
+          description: Notes returned in a data envelope.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Note'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    post:
+      tags: [notes]
+      summary: Publish note
+      description: Create a public or private Markdown note for the authenticated owner.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PublishNote'
+            example:
+              title: Hello from the API
+              content: '# Hello\n\nPublished with Bri.'
+              visibility: public
+              expiresInDays: 30
+      responses:
+        '201':
+          description: Note created.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Note'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /api/notes/by-id/{noteId}:
+    patch:
+      tags: [notes]
+      summary: Update note
+      description: Update a note owned by the authenticated caller and create a version snapshot.
+      parameters:
+        - $ref: '#/components/parameters/NoteId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateNote'
+      responses:
+        '200':
+          description: Note updated.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Note'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/notes/by-id/{noteId}/versions:
+    get:
+      tags: [notes]
+      summary: List versions
+      description: List version metadata or read one full version with versionId.
+      parameters:
+        - $ref: '#/components/parameters/NoteId'
+        - name: versionId
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Return one full version instead of the version list.
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
+      responses:
+        '200':
+          description: Version metadata or one version in a data envelope.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    oneOf:
+                      - type: array
+                        items:
+                          $ref: '#/components/schemas/NoteVersion'
+                      - $ref: '#/components/schemas/NoteVersion'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      tags: [notes]
+      summary: Restore version
+      description: Restore a prior version as the current note content.
+      parameters:
+        - $ref: '#/components/parameters/NoteId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RestoreVersion'
+      responses:
+        '200':
+          description: Version restored.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Note'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/public/notes/{username}/{slug}:
+    get:
+      tags: [public]
+      summary: Read note
+      description: Read a note as JSON. Public notes do not require a key; private notes require access.
+      security: []
+      parameters:
+        - name: username
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: slug
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Note returned in a data envelope.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Note'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/notes/{username}/{slug}/ask:
+    post:
+      tags: [public]
+      summary: Ask about note
+      description: Stream a concise AI answer grounded in one readable note.
+      security: []
+      parameters:
+        - name: username
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: slug
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [question]
+              properties:
+                question:
+                  type: string
+                  minLength: 1
+                  maxLength: 4096
+      responses:
+        '200':
+          description: Text stream containing the answer.
+          content:
+            text/plain:
+              schema:
+                type: string
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          description: Too many requests.
+        '503':
+          description: AI is not configured.

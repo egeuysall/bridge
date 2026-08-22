@@ -1,0 +1,66 @@
+---
+"$schema": https://holocron.so/frontmatter.json
+title: Manage note visibility and versions
+sidebarTitle: Notes & Versions
+description: Understand public and private notes, expiration, soft deletion, version history, and restoring an earlier Markdown snapshot.
+icon: lucide:history
+---
+
+# Manage note visibility and versions
+
+A Bri **note** has an owner, username, slug, title, Markdown content, visibility, lifecycle state, and timestamps. The same model powers the dashboard, CLI, REST API, and MCP tools.
+
+## Visibility and expiration
+
+`public` notes are readable at their normal URL. `private` notes stay behind **ownership and access checks**; sharing a URL does not make a private note public.
+
+Every note can have an **expiration**. CLI publishing caps the value at 30 days, and the API accepts a positive number of days or `null` for no expiration. Expired notes are treated as unavailable by normal reads.
+
+## Update a note
+
+An update writes a new **version snapshot** before replacing the current title, slug, visibility, or content:
+
+```bash
+bri notes update <note-id> --path ./updated.md --visibility public
+```
+
+The note ID is stable even when changing the title changes the slug. Use `bri notes list --json` to retrieve IDs for scripts.
+
+## Inspect history
+
+List version metadata, then read a full snapshot:
+
+```bash
+bri notes history <note-id>
+bri notes version <note-id> <version-id>
+```
+
+Version reads require **read permission** and only return versions belonging to a note the key can access. The REST equivalent is documented in the [HTTP API guide](../reference/http-api.mdx).
+
+## Restore a version
+
+Restore by supplying both IDs:
+
+```bash
+bri notes restore-version <note-id> <version-id>
+```
+
+Restore is a **write operation**. Bri validates the API key, note ownership, and version relationship before changing the current note. The restore request is:
+
+```bash
+curl -X PATCH \
+  -H "Authorization: Bearer $BRI_API_KEY" \
+  -H 'Content-Type: application/json' \
+  -d '{"action":"restore","versionId":"<version-id>"}' \
+  https://bri.fyi/api/notes/by-id/<note-id>/versions
+```
+
+## Ask questions about a note
+
+The **AI reader** accepts a short question and answers only from the selected note. It treats note content as untrusted context rather than instructions, and it streams plain text back to the CLI or web overlay.
+
+```bash
+bri notes ask <username> <slug> --question 'Summarize the open risks.'
+```
+
+AI access is rate-limited and depends on Bri’s server-side AI configuration. A missing model configuration returns an explicit service-unavailable response instead of exposing a provider key.

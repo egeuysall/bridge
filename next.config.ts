@@ -5,6 +5,7 @@ import type { NextConfig } from 'next';
 
 const nextConfig = (phase: string): NextConfig => {
   const isDev = phase === PHASE_DEVELOPMENT_SERVER;
+  const docsUrl = (process.env.BRI_DOCS_URL || 'https://bri-docs.vercel.app').replace(/\/$/, '');
 
   return {
     reactStrictMode: true,
@@ -20,6 +21,13 @@ const nextConfig = (phase: string): NextConfig => {
     },
 
     serverExternalPackages: ['sharp'],
+
+    async rewrites() {
+      return [
+        { source: '/docs', destination: `${docsUrl}/docs` },
+        { source: '/docs/:path*', destination: `${docsUrl}/docs/:path*` },
+      ];
+    },
 
     images: {
       formats: ['image/avif', 'image/webp'],

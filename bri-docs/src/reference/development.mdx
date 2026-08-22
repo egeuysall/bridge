@@ -1,0 +1,72 @@
+---
+"$schema": https://holocron.so/frontmatter.json
+title: Develop and deploy Bri documentation
+sidebarTitle: Development
+description: Run Bri and its Holocron docs locally, build both applications, and deploy the docs project behind bri.fyi/docs.
+icon: lucide:wrench
+---
+
+# Develop and deploy Bri documentation
+
+The **repository** contains two applications: the main Next.js Bri app and the `bri-docs/` Holocron site. The production Bri app rewrites `/docs/*` to the separate Vercel docs deployment so the public URL stays `bri.fyi/docs`.
+
+```diagram
+Browser ───> bri.fyi/docs/* ───> Vercel rewrite ───> bri-docs.vercel.app/docs/*
+   │                 │                                      │
+   └── Bri app routes┴── notes, auth, and API                └── Holocron MDX site
+```
+
+## Run the main app
+
+From the repository root:
+
+```bash
+bun install
+cp .env.example .env.local
+bun dev
+```
+
+The main app runs at **`http://localhost:3000`**. Keep secrets in `.env.local`; it is ignored by git and should never be copied into docs examples.
+
+## Run the docs site
+
+The docs app uses a fixed **`/docs/` base path** so its links and assets work through the production rewrite:
+
+```bash
+bun run docs:dev
+```
+
+Open **`http://localhost:5173/docs/`**. Build it with:
+
+```bash
+bun run docs:build
+```
+
+Holocron’s build catches MDX parsing errors, missing navigation pages, and broken internal links. Run the build after changing any page or `docs.jsonc` entry.
+
+## Deploy the docs
+
+The docs project is the Vercel project **`bri-docs`**. Deploy the current content from the repository root:
+
+```bash
+bun run docs:deploy
+```
+
+The stable deployment alias is **`https://bri-docs.vercel.app`**. The main app’s `BRI_DOCS_URL` setting can override that alias for a preview; production uses the default unless the environment variable is set.
+
+<Aside>
+<Info>
+**Keep deployments in order:** deploy the docs project first, then deploy the main Bri app if you changed the rewrite or `BRI_DOCS_URL` setting.
+</Info>
+</Aside>
+
+## Verify the public path
+
+Check both the bare path and a nested page after deployment:
+
+```bash
+curl -I https://bri.fyi/docs
+curl -I https://bri.fyi/docs/getting-started/installation
+```
+
+The response should be **`200`** and the nested page should load its CSS and client assets from `/docs/...`, not from the Bri app root.
