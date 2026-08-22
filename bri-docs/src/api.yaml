@@ -1,16 +1,31 @@
 openapi: 3.0.3
 info:
-  title: Bri Notes API
+  title: Bri HTTP API
   version: 1.0.0
-  description: Publish, read, update, and restore Markdown notes on Bri.
+  description: |
+    The Bri API publishes, reads, updates, and automates Markdown notes,
+    quick links, invitations, and note history. Responses use JSON envelopes
+    for JSON endpoints and plain Markdown or text streams where noted.
+  contact:
+    url: https://bri.fyi/docs
 servers:
   - url: https://bri.fyi
     description: Production
 tags:
   - name: notes
-    description: Note publishing and lifecycle operations
+    description: Create, list, update, delete, and restore notes.
   - name: public
-    description: Public and protected note reads
+    description: Readable note content and the note question endpoint.
+  - name: links
+    description: Manage short, trackable quick links.
+  - name: sharing
+    description: Invite users and inspect invitation notifications.
+  - name: account
+    description: API keys and API-key-backed web sessions.
+  - name: insights
+    description: First-party analytics and pinned resources.
+  - name: mcp
+    description: Stateless MCP discovery and JSON-RPC transport.
 security:
   - bearerAuth: []
 components:
@@ -19,8 +34,19 @@ components:
       type: http
       scheme: bearer
       bearerFormat: Bri API key
-      description: 'Send a key as Authorization: Bearer bri_...'
+      description: 'Send the full key as Authorization: Bearer bri_....'
   schemas:
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+          description: Human-readable error message.
+    Timestamp:
+      type: integer
+      format: int64
+      description: Unix timestamp in milliseconds.
     Note:
       type: object
       required:
@@ -33,10 +59,13 @@ components:
         - state
         - createdAt
         - updatedAt
+        - expiresAt
+        - deletedAt
+        - purgeAt
       properties:
         id:
           type: string
-          description: Stable note identifier.
+          description: Stable Convex note identifier.
         username:
           type: string
         slug:
@@ -45,7 +74,7 @@ components:
           type: string
         content:
           type: string
-          description: Markdown content. Some list responses may omit content.
+          description: Markdown content.
         visibility:
           type: string
           enum: [public, private]
@@ -53,39 +82,71 @@ components:
           type: string
           enum: [active, deleted]
         createdAt:
-          type: integer
-          format: int64
+          $ref: '#/components/schemas/Timestamp'
         updatedAt:
-          type: integer
-          format: int64
+          $ref: '#/components/schemas/Timestamp'
         expiresAt:
-          type: integer
-          format: int64
+          allOf:
+            - $ref: '#/components/schemas/Timestamp'
           nullable: true
-    NoteVersion:
+        deletedAt:
+          allOf:
+            - $ref: '#/components/schemas/Timestamp'
+          nullable: true
+        purgeAt:
+          allOf:
+            - $ref: '#/components/schemas/Timestamp'
+          nullable: true
+    PublicNote:
       type: object
-      required:
-        - id
-        - noteId
-        - title
-        - content
-        - createdAt
+      required: [username, slug, title, content, visibility, createdAt, updatedAt]
       properties:
-        id:
+        username:
           type: string
-        noteId:
+        slug:
           type: string
         title:
           type: string
         content:
           type: string
+        visibility:
+          type: string
+          enum: [public, private]
         createdAt:
-          type: integer
-          format: int64
-    PublishNote:
+          $ref: '#/components/schemas/Timestamp'
+        updatedAt:
+          $ref: '#/components/schemas/Timestamp'
+    NoteCreateRequest:
       type: object
       required: [title, content]
       properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 120
+        content:
+          type: string
+          minLength: 1
+          description: Markdown body. Whitespace-only content is rejected.
+        visibility:
+          type: string
+          enum: [public, private]
+          default: public
+        expiresInDays:
+          type: number
+          minimum: 1
+          maximum: 30
+          nullable: true
+          default: 30
+          description: Set to null for no expiration. Values above 30 are capped.
+    NoteUpdateRequest:
+      type: object
+      required: [title, content]
+      properties:
+        action:
+          type: string
+          enum: [update]
+          default: update
         title:
           type: string
           minLength: 1
@@ -103,10 +164,91 @@ components:
           maximum: 30
           nullable: true
           default: 30
-    UpdateNote:
+    NoteActionRequest:
+      type: object
+      required: [action]
+      properties:
+        action:
+          type: string
+          enum: [softDelete, restore, permanentDelete]
+    NoteCreateResult:
+      type: object
+      required: [id, username, slug, title]
+      properties:
+        id:
+          type: string
+        username:
+          type: string
+        slug:
+          type: string
+        title:
+          type: string
+    NoteUpdateResult:
+      type: object
+      required: [id, slug, title]
+      properties:
+        id:
+          type: string
+        slug:
+          type: string
+        title:
+          type: string
+    NoteDeleteResult:
+      type: object
+      required: [deleted]
+      properties:
+        deleted:
+          type: boolean
+          enum: [true]
+    NoteRestoreResult:
+      type: object
+      required: [restored]
+      properties:
+        restored:
+          type: boolean
+          enum: [true]
+        id:
+          type: string
+        slug:
+          type: string
+        title:
+          type: string
+    NoteVersionMetadata:
+      type: object
+      required: [id, noteId, version, title, slug, visibility, expiresAt, createdAt, actor]
+      properties:
+        id:
+          type: string
+        noteId:
+          type: string
+        version:
+          type: integer
+          minimum: 1
+        title:
+          type: string
+        slug:
+          type: string
+        visibility:
+          type: string
+          enum: [public, private]
+        expiresAt:
+          allOf:
+            - $ref: '#/components/schemas/Timestamp'
+          nullable: true
+        createdAt:
+          $ref: '#/components/schemas/Timestamp'
+        actor:
+          type: string
+          enum: [owner, api_key, admin, restore]
+    NoteVersion:
       allOf:
-        - $ref: '#/components/schemas/PublishNote'
-    RestoreVersion:
+        - $ref: '#/components/schemas/NoteVersionMetadata'
+        - type: object
+          required: [content]
+          properties:
+            content:
+              type: string
+    RestoreVersionRequest:
       type: object
       required: [action, versionId]
       properties:
@@ -115,33 +257,371 @@ components:
           enum: [restore]
         versionId:
           type: string
-    Error:
+    QuickLink:
       type: object
-      required: [error]
+      required:
+        - id
+        - username
+        - key
+        - targetUrl
+        - label
+        - clicks
+        - createdAt
+        - updatedAt
+        - lastClickedAt
       properties:
-        error:
+        id:
           type: string
+        username:
+          type: string
+        key:
+          type: string
+          maxLength: 80
+        targetUrl:
+          type: string
+        label:
+          type: string
+          nullable: true
+        clicks:
+          type: integer
+          minimum: 0
+        createdAt:
+          $ref: '#/components/schemas/Timestamp'
+        updatedAt:
+          $ref: '#/components/schemas/Timestamp'
+        lastClickedAt:
+          allOf:
+            - $ref: '#/components/schemas/Timestamp'
+          nullable: true
+    QuickLinkRequest:
+      type: object
+      required: [key, targetUrl]
+      properties:
+        key:
+          type: string
+          minLength: 1
+          maxLength: 80
+          description: Lowercase path key. Spaces become hyphens.
+        targetUrl:
+          type: string
+          minLength: 1
+          description: HTTP or HTTPS URL. Bri adds https:// when omitted.
+        label:
+          type: string
+          nullable: true
+    QuickLinkCreateResult:
+      type: object
+      required: [id, key]
+      properties:
+        id:
+          type: string
+        key:
+          type: string
+    QuickLinkUpdateResult:
+      type: object
+      required: [updated]
+      properties:
+        updated:
+          type: boolean
+          enum: [true]
+    ApiKey:
+      type: object
+      required: [id, prefix, permissions, label, createdAt, lastUsedAt, revokedAt]
+      properties:
+        id:
+          type: string
+        prefix:
+          type: string
+          description: Public key prefix. The secret is never returned by list endpoints.
+        permissions:
+          type: string
+          enum: [read, write, read_write]
+        label:
+          type: string
+          nullable: true
+        createdAt:
+          $ref: '#/components/schemas/Timestamp'
+        lastUsedAt:
+          allOf:
+            - $ref: '#/components/schemas/Timestamp'
+          nullable: true
+        revokedAt:
+          allOf:
+            - $ref: '#/components/schemas/Timestamp'
+          nullable: true
+    ApiKeyCreateRequest:
+      type: object
+      properties:
+        permissions:
+          type: string
+          enum: [read, write, read_write]
+          default: read
+        label:
+          type: string
+          maxLength: 64
+          nullable: true
+    ApiKeyCreateResult:
+      type: object
+      required: [key, prefix, permissions]
+      properties:
+        key:
+          type: string
+          description: Full secret. Save it immediately; it is shown only once.
+        prefix:
+          type: string
+        permissions:
+          type: string
+          enum: [read, write, read_write]
+    ApiKeyVerifyResult:
+      type: object
+      required: [prefix, permissions, label, username]
+      properties:
+        prefix:
+          type: string
+        permissions:
+          type: string
+          enum: [read, write, read_write]
+        label:
+          type: string
+          nullable: true
+        username:
+          type: string
+    InvitationRequest:
+      type: object
+      required: [kind, id, inviteeUsername]
+      properties:
+        kind:
+          type: string
+          enum: [note, link]
+        id:
+          type: string
+        inviteeUsername:
+          type: string
+          minLength: 1
+    InvitationResult:
+      type: object
+      required: [invited, alreadyInvited]
+      properties:
+        invited:
+          type: boolean
+        alreadyInvited:
+          type: boolean
+    InviteSummary:
+      type: object
+      required: [id, invitedCount, invitees]
+      properties:
+        id:
+          type: string
+        invitedCount:
+          type: integer
+          minimum: 0
+        invitees:
+          type: array
+          items:
+            type: string
+    Notification:
+      type: object
+      required: [id, kind, title, message, noteId, linkId, createdAt]
+      properties:
+        id:
+          type: string
+        kind:
+          type: string
+          enum: [invitation, achievement, notice]
+        title:
+          type: string
+        message:
+          type: string
+        noteId:
+          type: string
+          nullable: true
+        linkId:
+          type: string
+          nullable: true
+        createdAt:
+          $ref: '#/components/schemas/Timestamp'
+    NotificationActionRequest:
+      type: object
+      required: [action, notificationId]
+      properties:
+        action:
+          type: string
+          enum: [dismiss, open]
+        notificationId:
+          type: string
+    Pin:
+      type: object
+      required: [id, kind, noteId, linkId, title, href, createdAt]
+      properties:
+        id:
+          type: string
+        kind:
+          type: string
+          enum: [note, link]
+        noteId:
+          type: string
+          nullable: true
+        linkId:
+          type: string
+          nullable: true
+        title:
+          type: string
+        href:
+          type: string
+        createdAt:
+          $ref: '#/components/schemas/Timestamp'
+    PinRequest:
+      type: object
+      required: [type, id]
+      properties:
+        type:
+          type: string
+          enum: [note, link]
+        id:
+          type: string
+    PinResult:
+      type: object
+      required: [pinned, id]
+      properties:
+        pinned:
+          type: boolean
+        id:
+          type: string
+    AnalyticsDaily:
+      type: object
+      required: [date, views, pageViews, linkClicks]
+      properties:
+        date:
+          type: string
+          format: date
+        views:
+          type: integer
+        pageViews:
+          type: integer
+        linkClicks:
+          type: integer
+    Analytics:
+      type: object
+      required:
+        - totalViews
+        - totalPageViews
+        - totalLinkClicks
+        - days
+        - viewsBySlug
+        - topPages
+        - daily
+      properties:
+        totalViews:
+          type: integer
+        totalPageViews:
+          type: integer
+        totalLinkClicks:
+          type: integer
+        days:
+          type: integer
+          minimum: 1
+          maximum: 90
+        viewsBySlug:
+          type: object
+          additionalProperties:
+            type: integer
+        topPages:
+          type: array
+          items:
+            type: object
+            required: [slug, views]
+            properties:
+              slug:
+                type: string
+              views:
+                type: integer
+        daily:
+          type: array
+          items:
+            $ref: '#/components/schemas/AnalyticsDaily'
+    ApiSessionRequest:
+      type: object
+      required: [apiKey]
+      properties:
+        apiKey:
+          type: string
+          description: A read_write Bri API key.
+    ApiSessionResult:
+      type: object
+      required: [username]
+      properties:
+        username:
+          type: string
+    McpInfo:
+      type: object
+      required: [name, transport, endpoint, methods, authentication, tools]
+      properties:
+        name:
+          type: string
+        transport:
+          type: string
+        endpoint:
+          type: string
+        methods:
+          type: array
+          items:
+            type: string
+        authentication:
+          type: string
+        tools:
+          type: array
+          items:
+            type: string
   responses:
     BadRequest:
-      description: Invalid request.
+      description: The request body or parameter is invalid.
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/Error'
     Unauthorized:
-      description: Missing, malformed, revoked, or invalid API key.
+      description: The bearer key is missing, malformed, revoked, or invalid.
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/Error'
     Forbidden:
-      description: The key lacks the required permission or ownership.
+      description: The caller lacks the required permission or ownership.
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/Error'
     NotFound:
-      description: The note or version is not available.
+      description: The resource is not available to the caller.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Conflict:
+      description: The requested key already exists.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    TooLarge:
+      description: The request body exceeds the endpoint limit.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    RateLimited:
+      description: The caller has exceeded the AI request limit.
+      headers:
+        Retry-After:
+          schema:
+            type: integer
+          description: Seconds to wait before retrying.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    ServiceUnavailable:
+      description: A required Bri or AI service is not configured or available.
       content:
         application/json:
           schema:
@@ -154,22 +634,37 @@ components:
       schema:
         type: string
       description: Stable Bri note identifier.
+    LinkId:
+      name: linkId
+      in: path
+      required: true
+      schema:
+        type: string
+      description: Stable quick-link identifier.
+    KeyId:
+      name: keyId
+      in: path
+      required: true
+      schema:
+        type: string
+      description: Stable API-key identifier.
 paths:
   /api/notes:
     get:
       tags: [notes]
       summary: List notes
-      description: List the authenticated owner's active or deleted notes.
+      description: List the authenticated owner's notes. Active reads best-effort expire due notes before returning; deleted reads include soft-deleted notes.
       parameters:
         - name: state
           in: query
+          required: false
           schema:
             type: string
             enum: [active, deleted]
             default: active
       responses:
         '200':
-          description: Notes returned in a data envelope.
+          description: Notes in newest-first order.
           content:
             application/json:
               schema:
@@ -186,17 +681,17 @@ paths:
           $ref: '#/components/responses/Forbidden'
     post:
       tags: [notes]
-      summary: Publish note
-      description: Create a public or private Markdown note for the authenticated owner.
+      summary: Create note
+      description: Create a note for the API-key owner. Bri derives a unique slug from the title and returns the new note identifiers.
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/PublishNote'
+              $ref: '#/components/schemas/NoteCreateRequest'
             example:
-              title: Hello from the API
-              content: '# Hello\n\nPublished with Bri.'
+              title: Release notes
+              content: '# Shipped\n\nPublished from a service.'
               visibility: public
               expiresInDays: 30
       responses:
@@ -209,7 +704,7 @@ paths:
                 required: [data]
                 properties:
                   data:
-                    $ref: '#/components/schemas/Note'
+                    $ref: '#/components/schemas/NoteCreateResult'
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -219,8 +714,8 @@ paths:
   /api/notes/by-id/{noteId}:
     patch:
       tags: [notes]
-      summary: Update note
-      description: Update a note owned by the authenticated caller and create a version snapshot.
+      summary: Mutate note
+      description: Update, soft-delete, restore, or permanently delete an owned note. A normal update creates a version snapshot. The restore action in this route requires a signed-in Bri web session; API keys can use the version restore route.
       parameters:
         - $ref: '#/components/parameters/NoteId'
       requestBody:
@@ -228,10 +723,25 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/UpdateNote'
+              oneOf:
+                - $ref: '#/components/schemas/NoteUpdateRequest'
+                - $ref: '#/components/schemas/NoteActionRequest'
+            examples:
+              update:
+                value:
+                  title: Updated title
+                  content: '# Updated'
+                  visibility: private
+                  expiresInDays: null
+              softDelete:
+                value:
+                  action: softDelete
+              permanentDelete:
+                value:
+                  action: permanentDelete
       responses:
         '200':
-          description: Note updated.
+          description: Mutation result.
           content:
             application/json:
               schema:
@@ -239,7 +749,10 @@ paths:
                 required: [data]
                 properties:
                   data:
-                    $ref: '#/components/schemas/Note'
+                    oneOf:
+                      - $ref: '#/components/schemas/NoteUpdateResult'
+                      - $ref: '#/components/schemas/NoteDeleteResult'
+                      - $ref: '#/components/schemas/NoteRestoreResult'
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -251,8 +764,8 @@ paths:
   /api/notes/by-id/{noteId}/versions:
     get:
       tags: [notes]
-      summary: List versions
-      description: List version metadata or read one full version with versionId.
+      summary: Read versions
+      description: List up to 100 version metadata records, or pass versionId to read one complete snapshot. Version reads require an active, unexpired note.
       parameters:
         - $ref: '#/components/parameters/NoteId'
         - name: versionId
@@ -260,7 +773,6 @@ paths:
           required: false
           schema:
             type: string
-          description: Return one full version instead of the version list.
         - name: limit
           in: query
           required: false
@@ -271,7 +783,7 @@ paths:
             default: 50
       responses:
         '200':
-          description: Version metadata or one version in a data envelope.
+          description: Version list or one version snapshot.
           content:
             application/json:
               schema:
@@ -282,8 +794,10 @@ paths:
                     oneOf:
                       - type: array
                         items:
-                          $ref: '#/components/schemas/NoteVersion'
+                          $ref: '#/components/schemas/NoteVersionMetadata'
                       - $ref: '#/components/schemas/NoteVersion'
+        '400':
+          $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
@@ -293,7 +807,7 @@ paths:
     patch:
       tags: [notes]
       summary: Restore version
-      description: Restore a prior version as the current note content.
+      description: Restore a prior note snapshot and create a restore snapshot. This operation requires write permission and ownership.
       parameters:
         - $ref: '#/components/parameters/NoteId'
       requestBody:
@@ -301,7 +815,10 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/RestoreVersion'
+              $ref: '#/components/schemas/RestoreVersionRequest'
+            example:
+              action: restore
+              versionId: version-id
       responses:
         '200':
           description: Version restored.
@@ -312,7 +829,7 @@ paths:
                 required: [data]
                 properties:
                   data:
-                    $ref: '#/components/schemas/Note'
+                    $ref: '#/components/schemas/NoteRestoreResult'
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -324,8 +841,8 @@ paths:
   /api/public/notes/{username}/{slug}:
     get:
       tags: [public]
-      summary: Read note
-      description: Read a note as JSON. Public notes do not require a key; private notes require access.
+      summary: Read note JSON
+      description: Read a public note without credentials, or read a private note when the caller is the owner, an invitee, or an owner API key with read permission.
       security: []
       parameters:
         - name: username
@@ -340,7 +857,7 @@ paths:
             type: string
       responses:
         '200':
-          description: Note returned in a data envelope.
+          description: Public-facing note fields in a data envelope.
           content:
             application/json:
               schema:
@@ -348,14 +865,57 @@ paths:
                 required: [data]
                 properties:
                   data:
-                    $ref: '#/components/schemas/Note'
+                    $ref: '#/components/schemas/PublicNote'
         '404':
           $ref: '#/components/responses/NotFound'
+        '500':
+          description: Read failure.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/notes/{username}/{slug}/markdown:
+    get:
+      tags: [public]
+      summary: Read note Markdown
+      description: Return the readable note body as text/markdown. Public notes need no key; private notes still require access.
+      security: []
+      parameters:
+        - name: username
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: slug
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Markdown body with an inline filename.
+          headers:
+            Content-Disposition:
+              schema:
+                type: string
+            X-Content-Type-Options:
+              schema:
+                type: string
+          content:
+            text/markdown:
+              schema:
+                type: string
+        '404':
+          description: Note not found or not accessible.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /api/notes/{username}/{slug}/ask:
     post:
       tags: [public]
       summary: Ask about note
-      description: Stream a concise AI answer grounded in one readable note.
+      description: Stream a concise answer grounded only in one readable note. Public notes can be queried without a key; protected notes require access.
       security: []
       parameters:
         - name: username
@@ -382,7 +942,14 @@ paths:
                   maxLength: 4096
       responses:
         '200':
-          description: Text stream containing the answer.
+          description: Plain-text answer stream.
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+            X-Content-Type-Options:
+              schema:
+                type: string
           content:
             text/plain:
               schema:
@@ -391,7 +958,547 @@ paths:
           $ref: '#/components/responses/BadRequest'
         '404':
           $ref: '#/components/responses/NotFound'
+        '413':
+          $ref: '#/components/responses/TooLarge'
         '429':
-          description: Too many requests.
+          $ref: '#/components/responses/RateLimited'
         '503':
-          description: AI is not configured.
+          $ref: '#/components/responses/ServiceUnavailable'
+  /api/quick-links:
+    get:
+      tags: [links]
+      summary: List quick links
+      description: List the authenticated owner's quick links. API keys need read permission.
+      responses:
+        '200':
+          description: Quick links in newest-first order.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/QuickLink'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    post:
+      tags: [links]
+      summary: Create quick link
+      description: Create a unique short redirect for the authenticated owner. API keys need write permission.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/QuickLinkRequest'
+            example:
+              key: docs
+              targetUrl: https://bri.fyi/docs
+              label: Bri documentation
+      responses:
+        '201':
+          description: Quick link created.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/QuickLinkCreateResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /api/quick-links/{linkId}:
+    patch:
+      tags: [links]
+      summary: Update quick link
+      description: Replace a quick link's key, target URL, or label. The full key and target URL are required.
+      parameters:
+        - $ref: '#/components/parameters/LinkId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/QuickLinkRequest'
+      responses:
+        '200':
+          description: Quick link updated.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/QuickLinkUpdateResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+    delete:
+      tags: [links]
+      summary: Delete quick link
+      description: Permanently remove an owned quick link.
+      parameters:
+        - $ref: '#/components/parameters/LinkId'
+      responses:
+        '200':
+          description: Quick link deleted.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/NoteDeleteResult'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /api/invitations:
+    post:
+      tags: [sharing]
+      summary: Create invitation
+      description: Invite a Bri username to an owned note or quick link. Repeating an existing invitation is idempotent.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InvitationRequest'
+            example:
+              kind: note
+              id: note-id
+              inviteeUsername: teammate
+      responses:
+        '200':
+          description: Invitation result.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/InvitationResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/invitations/summary:
+    get:
+      tags: [sharing]
+      summary: List invitations
+      description: Return invitation counts and usernames for the owner's notes and quick links. API keys need read permission.
+      responses:
+        '200':
+          description: Invitation summaries.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: object
+                    required: [notes, links]
+                    properties:
+                      notes:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/InviteSummary'
+                      links:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/InviteSummary'
+                  warning:
+                    type: string
+                    description: Present when the summary failed partially and an empty result was returned.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /api/notifications:
+    get:
+      tags: [sharing]
+      summary: List notifications
+      description: List undismissed notifications for the authenticated username. API keys need read permission.
+      responses:
+        '200':
+          description: Notifications grouped with the resolved username.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: object
+                    required: [username, items]
+                    properties:
+                      username:
+                        type: string
+                        nullable: true
+                      items:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/Notification'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    patch:
+      tags: [sharing]
+      summary: Update notification
+      description: Dismiss a notification with write permission, or resolve its invitation target with read permission.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NotificationActionRequest'
+            examples:
+              dismiss:
+                value:
+                  action: dismiss
+                  notificationId: notification-id
+              open:
+                value:
+                  action: open
+                  notificationId: notification-id
+      responses:
+        '200':
+          description: Notification action result.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    oneOf:
+                      - type: object
+                        required: [dismissed]
+                        properties:
+                          dismissed:
+                            type: boolean
+                      - type: object
+                        required: [href]
+                        properties:
+                          href:
+                            type: string
+                            nullable: true
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /api/pins:
+    get:
+      tags: [insights]
+      summary: List pins
+      description: List the signed-in user's pinned notes and quick links. This is a first-party session endpoint; Bri API keys are not accepted.
+      security: []
+      responses:
+        '200':
+          description: Pinned resources.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Pin'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    post:
+      tags: [insights]
+      summary: Toggle pin
+      description: Pin or unpin an owned note or quick link. This is a first-party session endpoint.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PinRequest'
+      responses:
+        '200':
+          description: New pin state.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/PinResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/analytics:
+    get:
+      tags: [insights]
+      summary: Read analytics
+      description: Return first-party analytics for the signed-in owner. The days parameter is clamped to 1 through 90. Bri API keys are not accepted on this endpoint.
+      security: []
+      parameters:
+        - name: days
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 90
+            default: 30
+      responses:
+        '200':
+          description: Analytics window.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Analytics'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /api/keys:
+    get:
+      tags: [account]
+      summary: List API keys
+      description: List the signed-in owner's API-key metadata. The raw key secret is never included.
+      security: []
+      responses:
+        '200':
+          description: API-key metadata.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ApiKey'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    post:
+      tags: [account]
+      summary: Create API key
+      description: Create a key from a signed-in Bri web session. Save data.key immediately because the full secret is returned only once. An API-key bearer request cannot create another key.
+      security: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApiKeyCreateRequest'
+            example:
+              permissions: read_write
+              label: CI publisher
+      responses:
+        '200':
+          description: API key created.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/ApiKeyCreateResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /api/keys/{keyId}:
+    delete:
+      tags: [account]
+      summary: Revoke API key
+      description: Revoke an owned API key. Revocation takes effect on subsequent verification.
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/KeyId'
+      responses:
+        '200':
+          description: Key revoked.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: object
+                    required: [revoked]
+                    properties:
+                      revoked:
+                        type: boolean
+                        enum: [true]
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /api/keys/verify:
+    get:
+      tags: [account]
+      summary: Verify API key
+      description: Verify the bearer key and return non-secret metadata. This endpoint does not expose the raw secret.
+      responses:
+        '200':
+          description: Key metadata.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/ApiKeyVerifyResult'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /api/auth/session:
+    post:
+      tags: [account]
+      summary: Start web session
+      description: Exchange a read_write API key for an encrypted Bri web-session cookie. Use bearer keys directly for automation.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApiSessionRequest'
+      responses:
+        '200':
+          description: Session created and cookie set.
+          headers:
+            Set-Cookie:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/ApiSessionResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+  /api/auth/logout:
+    post:
+      tags: [account]
+      summary: End web session
+      description: Clear the Bri API-key web-session cookie.
+      security: []
+      responses:
+        '200':
+          description: Session cleared.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: object
+                    required: [signedOut]
+                    properties:
+                      signedOut:
+                        type: boolean
+                        enum: [true]
+  /mcp:
+    get:
+      tags: [mcp]
+      summary: Describe MCP
+      description: Return stateless Streamable HTTP MCP transport metadata. No SSE session transport is exposed.
+      security: []
+      responses:
+        '200':
+          description: MCP server metadata.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/McpInfo'
+    post:
+      tags: [mcp]
+      summary: Call MCP
+      description: Send a JSON-RPC MCP request with a bearer API key. The endpoint returns JSON responses and accepts up to 1.5 MB request bodies.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+              description: JSON-RPC request accepted by the MCP transport.
+      responses:
+        '200':
+          description: JSON-RPC result.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        '400':
+          description: JSON-RPC parse error.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '413':
+          $ref: '#/components/responses/TooLarge'
+        '500':
+          description: JSON-RPC internal error.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
