@@ -1341,7 +1341,7 @@ export function UserDashboard({ apiKeySession = false }: { apiKeySession?: boole
                   <p className="text-xs text-neutral-500">No notes match this filter.</p>
                 ) : null}
                 <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_32rem] 2xl:grid-cols-[minmax(0,1fr)_36rem] xl:items-start">
-                  <div className="grid grid-cols-1 items-start gap-1.5 lg:grid-cols-2">
+                  <div className="grid grid-cols-1 items-stretch gap-1.5 lg:grid-cols-2">
                     {visibleNotes.map((note, index) => {
                       const isEditing = editingNoteId === note.id;
                       const isOddLastCard =
@@ -2317,7 +2317,7 @@ export function UserDashboard({ apiKeySession = false }: { apiKeySession?: boole
                   <p className="text-xs text-neutral-500">No deleted notes match this filter.</p>
                 ) : null}
                 <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_20rem] xl:items-start">
-                  <div className="grid grid-cols-1 items-start gap-1.5 lg:grid-cols-2">
+                  <div className="grid grid-cols-1 items-stretch gap-1.5 lg:grid-cols-2">
                     {visibleDeletedNotes.map((note, index) => {
                       const isOddLastCard =
                         visibleDeletedNotes.length % 2 === 1 &&
