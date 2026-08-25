@@ -111,11 +111,14 @@ export default async function NotePage({
         data-note-export-root
       >
         <article className="mx-auto w-full max-w-155">
-          <div className="flex items-start justify-between gap-3">
-            <h1 className="text-base font-semibold text-neutral-100" data-note-export-title>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <h1
+              className="min-w-0 break-words text-base font-semibold text-neutral-100"
+              data-note-export-title
+            >
               {note.title}
             </h1>
-            <div className="flex shrink-0 items-center gap-2" data-note-export-actions>
+            <div className="flex flex-wrap items-center gap-2 sm:shrink-0" data-note-export-actions>
               <ExportPdfButton title={note.title} />
               {canEdit ? (
                 <>
